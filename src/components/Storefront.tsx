@@ -189,13 +189,41 @@ export const Storefront: React.FC<StorefrontProps> = ({
                   </div>
                 </div>
               ) : (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 flex items-start gap-2 animate-fadeIn">
-                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                  <div className="flex-1 text-[11px] leading-relaxed">
-                    <p className="font-bold text-rose-800">You are out of delivery range</p>
-                    <p className="text-rose-700 mt-0.5">
-                      Delivery is currently available <strong>strictly within a 15 km radius</strong> of Tadepalligudem (PIN 534102). Your entered location is ~{deliveryStatus.distanceKm} km away.
-                    </p>
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 space-y-2.5 animate-fadeIn">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                    <div className="flex-1 text-[11px] leading-relaxed">
+                      <p className="font-bold text-rose-800">You are out of delivery range</p>
+                      <p className="text-rose-700 mt-0.5">
+                        Delivery is currently available <strong>strictly within a 15 km radius</strong> of Tadepalligudem (PIN 534102). Your entered location is ~{deliveryStatus.distanceKm} km away.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-rose-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-rose-100/70 p-2.5 rounded-lg">
+                    <div className="flex items-center gap-1.5 text-[11px] text-rose-900 font-semibold">
+                      <Navigation className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                      <span>In Tadepalligudem? Detect your current mobile GPS location:</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleDetectGps}
+                      disabled={isDetectingGps}
+                      className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer disabled:opacity-60 shrink-0"
+                      title="Detect exact GPS location using mobile phone location"
+                    >
+                      {isDetectingGps ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                          <span>Detecting GPS...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Navigation className="w-3.5 h-3.5 text-white fill-white/20" />
+                          <span>Use My Location</span>
+                        </>
+                      )}
+                    </button>
                   </div>
                 </div>
               )}
@@ -213,6 +241,17 @@ export const Storefront: React.FC<StorefrontProps> = ({
                   className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-[10px] transition-colors cursor-pointer"
                 >
                   KN Road (1.2km)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const loc = 'Kobbarithota, Tadepalligudem 534102';
+                    setUserLocation(loc);
+                    handleCheckLocation(loc);
+                  }}
+                  className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-[10px] transition-colors cursor-pointer"
+                >
+                  Kobbarithota (1.6km)
                 </button>
                 <button
                   type="button"

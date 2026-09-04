@@ -40,10 +40,12 @@ export const TADEPALLIGUDEM_HUB = {
 export const TADEPALLIGUDEM_ZONE_AREAS = [
   { name: 'KN Road, Tadepalligudem', pincode: '534102', distanceKm: 1.2, lat: 16.8145, lng: 81.5285 },
   { name: 'Subba Rao Peta, Tadepalligudem', pincode: '534102', distanceKm: 1.8, lat: 16.8172, lng: 81.5312 },
+  { name: 'Kobbarithota / Kobbari Thota', pincode: '534102', distanceKm: 1.6, lat: 16.8152, lng: 81.5245 },
   { name: 'Housing Board Colony, Tadepalligudem', pincode: '534102', distanceKm: 2.5, lat: 16.8055, lng: 81.5218 },
   { name: 'Police Island / Main Bazaar', pincode: '534102', distanceKm: 1.4, lat: 16.8122, lng: 81.5262 },
   { name: 'Railway Station Road', pincode: '534102', distanceKm: 1.9, lat: 16.8095, lng: 81.5338 },
   { name: 'Seshampet', pincode: '534102', distanceKm: 2.2, lat: 16.8201, lng: 81.5225 },
+  { name: 'Somaraju Thota', pincode: '534102', distanceKm: 2.1, lat: 16.8185, lng: 81.5365 },
   { name: 'Madhavaram', pincode: '534102', distanceKm: 3.8, lat: 16.8315, lng: 81.5421 },
   { name: 'Pentapadu', pincode: '534166', distanceKm: 4.5, lat: 16.8365, lng: 81.5621 },
   { name: 'Kunchanapalli', pincode: '534102', distanceKm: 5.6, lat: 16.7821, lng: 81.5015 },

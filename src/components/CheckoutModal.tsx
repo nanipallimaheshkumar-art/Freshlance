@@ -492,13 +492,42 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
                 {/* Out of range alert message */}
                 {!rangeStatus.isDeliverable && (
-                  <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-900 flex items-start gap-2 animate-fadeIn">
-                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                    <div className="flex-1 text-[11px] leading-relaxed">
-                      <p className="font-bold text-rose-800">You are out of delivery range</p>
-                      <p className="text-rose-700 mt-0.5">
-                        FreshLane operates exclusively within a <strong>15 km radius of Tadepalligudem (PIN 534102)</strong>. Your specified address is ~{rangeStatus.distanceKm} km away. Orders cannot be fulfilled outside this zone.
-                      </p>
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 space-y-2.5 animate-fadeIn">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                      <div className="flex-1 text-[11px] leading-relaxed">
+                        <p className="font-bold text-rose-800">You are out of delivery range</p>
+                        <p className="text-rose-700 mt-0.5">
+                          FreshLane operates exclusively within a <strong>15 km radius of Tadepalligudem (PIN 534102)</strong>. Your specified address is ~{rangeStatus.distanceKm} km away. Orders cannot be fulfilled outside this zone.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Prominent Use My Location button for mobile users */}
+                    <div className="pt-2 border-t border-rose-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-rose-100/70 p-2.5 rounded-lg">
+                      <div className="flex items-center gap-1.5 text-[11px] text-rose-900 font-semibold">
+                        <Navigation className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                        <span>Are you currently in Tadepalligudem?</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleUseMyLocation}
+                        disabled={isDetectingLocation}
+                        className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer disabled:opacity-60 shrink-0"
+                        title="Detect exact GPS location using mobile phone location"
+                      >
+                        {isDetectingLocation ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />
+                            <span>Detecting Mobile Location...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Navigation className="w-3.5 h-3.5 text-white fill-white/20" />
+                            <span>Use My Location</span>
+                          </>
+                        )}
+                      </button>
                     </div>
                   </div>
                 )}
@@ -512,6 +541,13 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     className="px-2 py-0.5 rounded bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-[10px] cursor-pointer"
                   >
                     KN Road (1.2km)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAddressChange('Kobbarithota, Tadepalligudem, 534102')}
+                    className="px-2 py-0.5 rounded bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-[10px] cursor-pointer"
+                  >
+                    Kobbarithota (1.6km)
                   </button>
                   <button
                     type="button"
