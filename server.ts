@@ -216,7 +216,7 @@ app.post("/api/create-order", async (req, res) => {
       order_id: order.id,
       amount: order.amount,
       currency: order.currency,
-      key_id: process.env.RAZORPAY_KEY_ID || "rzp_test_TXoUBcTgIq9Wfa",
+      key_id: process.env.RAZORPAY_KEY_ID || "rzp_live_TXuXQYEDf7QJgT",
     });
   } catch (error: any) {
     console.error("Razorpay order creation failed:", error);
