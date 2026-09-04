@@ -42,8 +42,8 @@ app.use(express.json({ limit: "20mb" }));
 // Lazy initializer for Razorpay client
 let razorpayClient: Razorpay | null = null;
 function getRazorpay(): Razorpay {
-  const key_id = process.env.RAZORPAY_KEY_ID || "rzp_test_TXoUBcTgIq9Wfa";
-  const key_secret = process.env.RAZORPAY_KEY_SECRET || "FHUDLFkILqXAGuSNoARdn76o";
+  const key_id = process.env.RAZORPAY_KEY_ID || "rzp_live_TXuXQYEDf7QJgT";
+  const key_secret = process.env.RAZORPAY_KEY_SECRET || "Pybkl8UcoRJpaLvbfwtE0ibn";
 
   if (!key_id || !key_secret) {
     throw new Error("Razorpay credentials (RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET) must be set in the environment.");
