@@ -166,14 +166,15 @@ export const Storefront: React.FC<StorefrontProps> = ({
                     onClick={handleDetectGps}
                     disabled={isDetectingGps}
                     title="Detect Current GPS Location"
-                    className="h-11 px-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-semibold rounded-xl flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                    className="h-11 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap"
                   >
                     {isDetectingGps ? (
                       <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
                     ) : (
                       <Navigation className="w-3.5 h-3.5 text-emerald-700" />
                     )}
-                    <span className="hidden sm:inline">GPS</span>
+                    <span className="hidden sm:inline">Use My Location</span>
+                    <span className="sm:hidden">Location</span>
                   </button>
                 </div>
               </div>

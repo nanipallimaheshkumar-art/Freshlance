@@ -209,32 +209,32 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({
             <form onSubmit={handleStaffLogin} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">
-                  {staffRoleTab === 'owner' ? 'Store Admin Email ID' : 'Driver Email ID or Driver ID'}
+                  {staffRoleTab === 'owner' ? 'Store Administrator Email' : 'Driver Email ID or Driver ID'}
                 </label>
                 <input
                   type={staffRoleTab === 'owner' ? 'email' : 'text'}
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder={staffRoleTab === 'owner' ? 'nanipallimaheshkumar@gmail.com' : 'e.g. driver email or DRV-101'}
+                  placeholder={staffRoleTab === 'owner' ? 'admin@store.com' : 'e.g. driver@freshlane.com or DRV-101'}
                   className="w-full h-11 px-3.5 text-xs bg-slate-950 border border-slate-700 rounded-xl outline-none focus:border-emerald-500 text-white placeholder:text-slate-600 font-medium transition-all"
                   required
                 />
                 <p className="mt-1 text-[11px] text-slate-500">
                   {staffRoleTab === 'owner'
-                    ? 'Owner desk is restricted strictly to nanipallimaheshkumar@gmail.com.'
+                    ? 'Store Admin Portal is strictly restricted to authorized administrators.'
                     : 'Driver credentials must be created by Store Admin in the Admin Portal.'}
                 </p>
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">
-                  {staffRoleTab === 'owner' ? 'Admin 6-Digit Security Code' : 'Driver Password / PIN'}
+                  {staffRoleTab === 'owner' ? 'Administrator Security Code' : 'Driver Password / PIN'}
                 </label>
                 <input
                   type="password"
                   value={passcode}
                   onChange={(e) => setPasscode(e.target.value)}
-                  placeholder={staffRoleTab === 'owner' ? 'Security code (e.g. 132908)' : 'Password assigned by Store Admin'}
+                  placeholder={staffRoleTab === 'owner' ? '••••••••' : 'Password assigned by Store Admin'}
                   className="w-full h-11 px-3.5 text-xs bg-slate-950 border border-slate-700 rounded-xl outline-none focus:border-emerald-500 text-white placeholder:text-slate-600 font-medium transition-all"
                   required
                 />
@@ -258,14 +258,12 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({
 
             {/* Security Notice */}
             <div className="mt-5 pt-4 border-t border-slate-800 text-center">
-              <p className="text-[11px] text-slate-400 font-medium">
+              <p className="text-[11px] text-slate-500 font-medium">
                 {staffRoleTab === 'owner' ? (
-                  <span>
-                    Owner Login: <span className="text-emerald-400 font-mono">nanipallimaheshkumar@gmail.com</span>
-                  </span>
+                  <span>🔒 Secure Store Operations Portal · Restricted Access</span>
                 ) : (
                   <span>
-                    Need driver credentials? The Store Admin adds driver logins with email and password from the Admin Portal.
+                    Need driver credentials? Please contact your store administrator.
                   </span>
                 )}
               </p>

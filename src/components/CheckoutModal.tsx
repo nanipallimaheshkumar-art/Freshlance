@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { CartItem, UserAccount } from '../types';
 import { saveUserOrder } from '../utils/orderStore';
-import { checkDeliveryEligibility, DeliveryEligibilityResult } from '../utils/deliveryZone';
+import { checkDeliveryEligibility, DeliveryEligibilityResult, TADEPALLIGUDEM_ZONE_AREAS } from '../utils/deliveryZone';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -71,6 +71,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [cloudflareWorkerUrl, setCloudflareWorkerUrl] = useState<string>(() => {
     return localStorage.getItem('freshlane_cloudflare_url') || '';
   });
+  const [isDetectingLocation, setIsDetectingLocation] = useState(false);
+  const [locationSuccessMsg, setLocationSuccessMsg] = useState<string | null>(null);
 
   const handleAddressChange = (newAddress: string) => {
     setAddress(newAddress);
@@ -83,6 +85,102 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     } else {
       setPaymentError(null);
     }
+  };
+
+  const handleUseMyLocation = () => {
+    setIsDetectingLocation(true);
+    setLocationSuccessMsg(null);
+    setPaymentError(null);
+
+    if (typeof window === 'undefined' || !navigator.geolocation) {
+      setIsDetectingLocation(false);
+      setPaymentError('Geolocation is not supported on this browser or device.');
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        const userCoords = { lat, lng };
+
+        // Check delivery eligibility strictly against Tadepalligudem 15km Hub
+        const eligibility = checkDeliveryEligibility({ coords: userCoords });
+        setRangeStatus(eligibility);
+
+        let resolvedAddress = '';
+
+        // Reverse Geocode using OpenStreetMap Nominatim for human-readable street/locality address
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 4000);
+          const geoRes = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+            { signal: controller.signal, headers: { 'Accept-Language': 'en' } }
+          );
+          clearTimeout(timeoutId);
+
+          if (geoRes.ok) {
+            const data = await geoRes.json();
+            if (data && data.address) {
+              const addr = data.address;
+              const parts = [
+                addr.road || addr.pedestrian || addr.suburb || addr.neighbourhood,
+                addr.residential || addr.city_district || addr.village || addr.town || addr.city,
+                addr.state_district || addr.county,
+                addr.postcode || (eligibility.isDeliverable ? '534102' : ''),
+                addr.state || 'Andhra Pradesh'
+              ].filter(Boolean);
+
+              if (parts.length > 0) {
+                resolvedAddress = parts.join(', ');
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('Reverse geocode request timed out or was blocked:', err);
+        }
+
+        // Fallback address formatting with exact GPS coordinates and closest locality
+        if (!resolvedAddress) {
+          if (eligibility.isDeliverable) {
+            const matchedArea = TADEPALLIGUDEM_ZONE_AREAS.find(a =>
+              eligibility.localityMatched && a.name.toLowerCase().includes(eligibility.localityMatched.toLowerCase())
+            ) || TADEPALLIGUDEM_ZONE_AREAS[0];
+            resolvedAddress = `${matchedArea.name}, Tadepalligudem, 534102 (GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+          } else {
+            resolvedAddress = `Current GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)} (~${eligibility.distanceKm} km from Tadepalligudem Hub)`;
+          }
+        }
+
+        setAddress(resolvedAddress);
+        setIsDetectingLocation(false);
+
+        if (eligibility.isDeliverable) {
+          setLocationSuccessMsg(`Exact location detected (~${eligibility.distanceKm} km from Hub)`);
+          setPaymentError(null);
+          setTimeout(() => setLocationSuccessMsg(null), 5000);
+        } else {
+          setPaymentError(
+            `You are out of delivery range (~${eligibility.distanceKm} km away). FreshLane delivers strictly within a 15 km radius of Tadepalligudem (PIN 534102).`
+          );
+        }
+      },
+      (geoError) => {
+        console.warn('Geolocation error:', geoError);
+        setIsDetectingLocation(false);
+        let msg = 'Could not detect your exact location. Please ensure location access is allowed in your browser.';
+        if (geoError.code === 1) {
+          msg = 'Location permission was denied. Please allow location access in your browser or enter your delivery address.';
+        } else if (geoError.code === 2) {
+          msg = 'Location unavailable on your device. Please enter your delivery address manually.';
+        } else if (geoError.code === 3) {
+          msg = 'Location detection timed out. Please try again or enter your delivery address.';
+        }
+        setPaymentError(msg);
+      },
+      { enableHighAccuracy: true, timeout: 9000, maximumAge: 30000 }
+    );
   };
 
   const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);
@@ -330,18 +428,43 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             <form onSubmit={handlePlaceOrder} className="space-y-4">
               {/* Delivery Address */}
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2.5">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
                     <MapPin className="w-3.5 h-3.5 text-emerald-600" />
                     <span>Delivery Address</span>
                   </label>
+
+                  <button
+                    type="button"
+                    onClick={handleUseMyLocation}
+                    disabled={isDetectingLocation}
+                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95 disabled:opacity-60"
+                    title="Detect exact GPS location to deliver"
+                  >
+                    {isDetectingLocation ? (
+                      <>
+                        <Loader2 className="w-3 h-3 text-white animate-spin" />
+                        <span>Detecting...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Navigation className="w-3 h-3 text-white" />
+                        <span>Use My Location</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between text-[11px]">
                   {rangeStatus.isDeliverable ? (
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200/60">
-                      ⚡ 24–30 min ETA ({rangeStatus.distanceKm} km from 534102 Hub)
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/60 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                      <span>⚡ 24–30 min ETA ({rangeStatus.distanceKm} km from 534102 Hub)</span>
                     </span>
                   ) : (
-                    <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200/60">
-                      ⛔ Out of Range ({rangeStatus.distanceKm} km away)
+                    <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200/60 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3 text-rose-600" />
+                      <span>⛔ Out of Range ({rangeStatus.distanceKm} km away)</span>
                     </span>
                   )}
                 </div>
@@ -358,6 +481,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   }`}
                   required
                 />
+
+                {/* Location Detection Success Confirmation */}
+                {locationSuccessMsg && (
+                  <div className="p-2 bg-emerald-50 border border-emerald-200/80 rounded-lg text-[11px] text-emerald-800 font-semibold flex items-center gap-1.5 animate-fadeIn">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span>{locationSuccessMsg}</span>
+                  </div>
+                )}
 
                 {/* Out of range alert message */}
                 {!rangeStatus.isDeliverable && (

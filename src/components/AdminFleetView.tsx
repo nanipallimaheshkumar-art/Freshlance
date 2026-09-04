@@ -18,11 +18,7 @@ import {
   Key,
   Lock,
   Mail,
-  Eye,
-  EyeOff,
-  Trash2,
-  Copy,
-  Check
+  Trash2
 } from 'lucide-react';
 import { DriverRecord, OrderRecord } from '../types';
 import { getRegisteredDrivers, registerDriverAccount, deleteDriverAccount } from '../utils/authStore';
@@ -50,8 +46,6 @@ export const AdminFleetView: React.FC<AdminFleetViewProps> = ({
   const [newDriverType, setNewDriverType] = useState<'electric_scooter' | 'bike' | 'van'>('electric_scooter');
   const [newDriverZone, setNewDriverZone] = useState('KN Road Hub (Tadepalligudem 534102)');
   const [formError, setFormError] = useState<string | null>(null);
-  const [showPasswordMap, setShowPasswordMap] = useState<Record<string, boolean>>({});
-  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Reassign Modal
   const [reassignModalOrder, setReassignModalOrder] = useState<OrderRecord | null>(null);
@@ -197,17 +191,6 @@ export const AdminFleetView: React.FC<AdminFleetViewProps> = ({
       console.error('Delete driver error:', e);
     }
     fetchDrivers();
-  };
-
-  const handleCopyCredentials = (drv: DriverRecord) => {
-    const text = `FreshLane Driver Login Credentials:\nEmail / ID: ${drv.email || drv.id}\nPassword: ${drv.password || 'Contact Admin'}\nZone: ${drv.zone}`;
-    navigator.clipboard.writeText(text);
-    setCopiedId(drv.id);
-    setTimeout(() => setCopiedId(null), 2500);
-  };
-
-  const togglePasswordVisibility = (id: string) => {
-    setShowPasswordMap((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
   const handleConfirmReassign = () => {
@@ -421,7 +404,6 @@ export const AdminFleetView: React.FC<AdminFleetViewProps> = ({
             <thead>
               <tr className="border-b border-slate-200 text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">
                 <th className="pb-3 pl-2">Driver</th>
-                <th className="pb-3">Login Credentials</th>
                 <th className="pb-3">Vehicle &amp; Zone</th>
                 <th className="pb-3">Status</th>
                 <th className="pb-3">Battery</th>
@@ -432,45 +414,11 @@ export const AdminFleetView: React.FC<AdminFleetViewProps> = ({
             </thead>
             <tbody className="divide-y divide-slate-100">
               {drivers.map((drv) => {
-                const isPasswordShown = !!showPasswordMap[drv.id];
                 return (
                   <tr key={drv.id} className="hover:bg-slate-50/70 transition-colors">
                     <td className="py-3 pl-2">
                       <div className="font-bold text-slate-900">{drv.name}</div>
                       <div className="text-[11px] text-slate-400 font-mono">{drv.id} · {drv.phone}</div>
-                    </td>
-
-                    <td className="py-3">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-1 text-[11px] font-mono text-slate-800">
-                          <Mail className="w-3 h-3 text-slate-400 shrink-0" />
-                          <span className="truncate max-w-[160px] font-semibold">{drv.email || `${drv.id.toLowerCase()}@freshlane.com`}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 text-[11px]">
-                          <Lock className="w-3 h-3 text-slate-400 shrink-0" />
-                          <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-700 font-bold">
-                            {drv.password ? (isPasswordShown ? drv.password : '••••••') : 'Default (PIN)'}
-                          </span>
-                          {drv.password && (
-                            <button
-                              type="button"
-                              onClick={() => togglePasswordVisibility(drv.id)}
-                              className="text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
-                              title={isPasswordShown ? 'Hide Password' : 'Show Password'}
-                            >
-                              {isPasswordShown ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => handleCopyCredentials(drv)}
-                            className="text-slate-400 hover:text-emerald-600 p-0.5 cursor-pointer"
-                            title="Copy Driver Login Details"
-                          >
-                            {copiedId === drv.id ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                          </button>
-                        </div>
-                      </div>
                     </td>
 
                     <td className="py-3">
@@ -602,11 +550,11 @@ export const AdminFleetView: React.FC<AdminFleetViewProps> = ({
                     <span>Driver Password</span>
                   </label>
                   <input
-                    type="text"
+                    type="password"
                     required
                     value={newDriverPassword}
                     onChange={(e) => setNewDriverPassword(e.target.value)}
-                    placeholder="e.g. ramesh789"
+                    placeholder="••••••••"
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 text-slate-900 font-mono text-[11px]"
                   />
                 </div>

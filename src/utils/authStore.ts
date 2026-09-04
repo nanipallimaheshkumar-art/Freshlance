@@ -314,14 +314,14 @@ export function authenticateStaff(
     if (cleanId !== ADMIN_CREDENTIALS.email.toLowerCase()) {
       return {
         success: false,
-        error: `Unauthorized Admin Email. Access to the Store Admin Desk is strictly restricted to ${ADMIN_CREDENTIALS.email}.`,
+        error: 'Unauthorized administrator email address. Access denied.',
       };
     }
 
     if (cleanPass !== ADMIN_CREDENTIALS.securityCode) {
       return {
         success: false,
-        error: 'Invalid Security Code. Please enter the authorized 6-digit security code (132908).',
+        error: 'Invalid security code. Access denied.',
       };
     }
 
@@ -338,7 +338,7 @@ export function authenticateStaff(
       success: true,
       user: {
         id: 'admin-mahesh',
-        name: 'Mahesh Kumar',
+        name: 'Store Administrator',
         email: ADMIN_CREDENTIALS.email,
         role: 'owner',
         city: 'Tadepalligudem',
@@ -357,7 +357,7 @@ export function authenticateStaff(
     if (drivers.length === 0) {
       return {
         success: false,
-        error: `No driver accounts have been registered yet. Please ask the Store Administrator (${ADMIN_CREDENTIALS.email}) to add your driver credentials (Email ID & Password) in the Admin Portal first.`,
+        error: 'No driver accounts registered yet. Please contact the Store Administrator to create driver credentials.',
       };
     }
 
@@ -372,14 +372,14 @@ export function authenticateStaff(
     if (!matchedDriver) {
       return {
         success: false,
-        error: `Driver credentials not found. Only drivers registered by Store Administrator (${ADMIN_CREDENTIALS.email}) in the Admin Portal can log in.`,
+        error: 'Driver credentials not found. Only registered fleet drivers can access this portal.',
       };
     }
 
     if (matchedDriver.password && matchedDriver.password !== cleanPass) {
       return {
         success: false,
-        error: 'Incorrect driver password. Please check your password or contact the Store Administrator.',
+        error: 'Incorrect driver password. Please check your credentials or contact the Store Administrator.',
       };
     }
 
