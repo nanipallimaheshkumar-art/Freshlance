@@ -14,9 +14,18 @@ import {
   Navigation,
   Compass,
   RefreshCw,
-  ExternalLink
+  ExternalLink,
+  Key,
+  Lock,
+  Mail,
+  Eye,
+  EyeOff,
+  Trash2,
+  Copy,
+  Check
 } from 'lucide-react';
 import { DriverRecord, OrderRecord } from '../types';
+import { getRegisteredDrivers, registerDriverAccount, deleteDriverAccount } from '../utils/authStore';
 
 interface AdminFleetViewProps {
   orders: OrderRecord[];
@@ -31,13 +40,18 @@ export const AdminFleetView: React.FC<AdminFleetViewProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [selectedDriver, setSelectedDriver] = useState<DriverRecord | null>(null);
 
-  // Add Driver Modal
+  // Add Driver Modal State with Email and Password
   const [isAddDriverOpen, setIsAddDriverOpen] = useState(false);
   const [newDriverName, setNewDriverName] = useState('');
-  const [newDriverPhone, setNewDriverPhone] = useState('+91 98');
-  const [newDriverVehicle, setNewDriverVehicle] = useState('KA-01-EQ-');
+  const [newDriverEmail, setNewDriverEmail] = useState('');
+  const [newDriverPassword, setNewDriverPassword] = useState('');
+  const [newDriverPhone, setNewDriverPhone] = useState('+91 ');
+  const [newDriverVehicle, setNewDriverVehicle] = useState('AP-39-EQ-');
   const [newDriverType, setNewDriverType] = useState<'electric_scooter' | 'bike' | 'van'>('electric_scooter');
-  const [newDriverZone, setNewDriverZone] = useState('Indiranagar Hub');
+  const [newDriverZone, setNewDriverZone] = useState('KN Road Hub (Tadepalligudem 534102)');
+  const [formError, setFormError] = useState<string | null>(null);
+  const [showPasswordMap, setShowPasswordMap] = useState<Record<string, boolean>>({});
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Reassign Modal
   const [reassignModalOrder, setReassignModalOrder] = useState<OrderRecord | null>(null);
@@ -46,10 +60,48 @@ export const AdminFleetView: React.FC<AdminFleetViewProps> = ({
   const fetchDrivers = async () => {
     try {
       const res = await fetch('/api/drivers');
-      if (res.ok) {
-        const data = await res.json();
-        setDrivers(data.drivers || []);
-      }
+      const serverDrivers: DriverRecord[] = res.ok ? (await res.json()).drivers || [] : [];
+      const registered = getRegisteredDrivers();
+
+      // Merge backend drivers and registered accounts
+      const mergedMap = new Map<string, DriverRecord>();
+
+      serverDrivers.forEach((d) => {
+        mergedMap.set(d.id, d);
+      });
+
+      registered.forEach((reg) => {
+        const existing = mergedMap.get(reg.id);
+        if (existing) {
+          mergedMap.set(reg.id, {
+            ...existing,
+            email: reg.email,
+            password: reg.password,
+            vehicleNumber: reg.vehicleNumber || existing.vehicleNumber,
+            zone: reg.zone || existing.zone,
+          });
+        } else {
+          mergedMap.set(reg.id, {
+            id: reg.id,
+            name: reg.name,
+            email: reg.email,
+            password: reg.password,
+            phone: reg.phone || '+91 99000 00000',
+            vehicleNumber: reg.vehicleNumber || 'AP-39-EQ-4421',
+            vehicleType: reg.vehicleType || 'electric_scooter',
+            zone: reg.zone || 'KN Road Hub, Tadepalligudem',
+            isOnline: true,
+            status: 'available',
+            rating: 5.0,
+            deliveriesToday: 0,
+            earningsToday: 0,
+            batteryLevel: 100,
+            currentCoords: { lat: 16.8145, lng: 81.5285, heading: 0, speed: 0 },
+          });
+        }
+      });
+
+      setDrivers(Array.from(mergedMap.values()));
     } catch (e) {
       console.error('Failed to fetch fleet:', e);
     } finally {
@@ -65,14 +117,54 @@ export const AdminFleetView: React.FC<AdminFleetViewProps> = ({
 
   const handleAddDriver = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newDriverName.trim() || !newDriverPhone.trim() || !newDriverVehicle.trim()) return;
+    setFormError(null);
+
+    if (!newDriverName.trim()) {
+      setFormError('Please enter driver name');
+      return;
+    }
+    if (!newDriverEmail.trim() || !newDriverEmail.includes('@')) {
+      setFormError('Please enter a valid driver email address (e.g. driver@freshlane.com)');
+      return;
+    }
+    if (!newDriverPassword.trim() || newDriverPassword.trim().length < 4) {
+      setFormError('Driver password must be at least 4 characters long');
+      return;
+    }
+    if (!newDriverPhone.trim() || newDriverPhone.trim().length < 8) {
+      setFormError('Please enter a valid driver mobile number');
+      return;
+    }
+    if (!newDriverVehicle.trim()) {
+      setFormError('Please enter vehicle registration number');
+      return;
+    }
 
     try {
-      const res = await fetch('/api/admin/driver', {
+      // 1. Register in authStore so driver can immediately log in
+      const regRes = registerDriverAccount({
+        name: newDriverName.trim(),
+        email: newDriverEmail.trim(),
+        password: newDriverPassword.trim(),
+        phone: newDriverPhone.trim(),
+        vehicleNumber: newDriverVehicle.trim(),
+        vehicleType: newDriverType,
+        zone: newDriverZone,
+      });
+
+      if (!regRes.success) {
+        setFormError(regRes.error || 'Failed to register driver');
+        return;
+      }
+
+      // 2. Register on server dispatch engine
+      await fetch('/api/admin/driver', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: newDriverName.trim(),
+          email: newDriverEmail.trim(),
+          password: newDriverPassword.trim(),
           phone: newDriverPhone.trim(),
           vehicleNumber: newDriverVehicle.trim(),
           vehicleType: newDriverType,
@@ -80,14 +172,42 @@ export const AdminFleetView: React.FC<AdminFleetViewProps> = ({
         }),
       });
 
-      if (res.ok) {
-        setIsAddDriverOpen(false);
-        setNewDriverName('');
-        fetchDrivers();
-      }
+      // Clear & close
+      setIsAddDriverOpen(false);
+      setNewDriverName('');
+      setNewDriverEmail('');
+      setNewDriverPassword('');
+      setNewDriverPhone('+91 ');
+      setNewDriverVehicle('AP-39-EQ-');
+      setFormError(null);
+      fetchDrivers();
     } catch (err) {
       console.error('Failed to add driver:', err);
+      setFormError('An error occurred while creating driver account.');
     }
+  };
+
+  const handleDeleteDriver = async (driverId: string) => {
+    if (!confirm(`Are you sure you want to revoke and delete driver (${driverId})?`)) return;
+
+    deleteDriverAccount(driverId);
+    try {
+      await fetch(`/api/admin/driver/${driverId}`, { method: 'DELETE' });
+    } catch (e) {
+      console.error('Delete driver error:', e);
+    }
+    fetchDrivers();
+  };
+
+  const handleCopyCredentials = (drv: DriverRecord) => {
+    const text = `FreshLane Driver Login Credentials:\nEmail / ID: ${drv.email || drv.id}\nPassword: ${drv.password || 'Contact Admin'}\nZone: ${drv.zone}`;
+    navigator.clipboard.writeText(text);
+    setCopiedId(drv.id);
+    setTimeout(() => setCopiedId(null), 2500);
+  };
+
+  const togglePasswordVisibility = (id: string) => {
+    setShowPasswordMap((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
   const handleConfirmReassign = () => {
@@ -301,6 +421,7 @@ export const AdminFleetView: React.FC<AdminFleetViewProps> = ({
             <thead>
               <tr className="border-b border-slate-200 text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">
                 <th className="pb-3 pl-2">Driver</th>
+                <th className="pb-3">Login Credentials</th>
                 <th className="pb-3">Vehicle &amp; Zone</th>
                 <th className="pb-3">Status</th>
                 <th className="pb-3">Battery</th>
@@ -310,64 +431,109 @@ export const AdminFleetView: React.FC<AdminFleetViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {drivers.map((drv) => (
-                <tr key={drv.id} className="hover:bg-slate-50/70 transition-colors">
-                  <td className="py-3 pl-2">
-                    <div className="font-bold text-slate-900">{drv.name}</div>
-                    <div className="text-[11px] text-slate-400 font-mono">{drv.id} · {drv.phone}</div>
-                  </td>
+              {drivers.map((drv) => {
+                const isPasswordShown = !!showPasswordMap[drv.id];
+                return (
+                  <tr key={drv.id} className="hover:bg-slate-50/70 transition-colors">
+                    <td className="py-3 pl-2">
+                      <div className="font-bold text-slate-900">{drv.name}</div>
+                      <div className="text-[11px] text-slate-400 font-mono">{drv.id} · {drv.phone}</div>
+                    </td>
 
-                  <td className="py-3">
-                    <div className="font-semibold text-slate-800">{drv.vehicleNumber}</div>
-                    <div className="text-[11px] text-slate-500">{drv.zone}</div>
-                  </td>
+                    <td className="py-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1 text-[11px] font-mono text-slate-800">
+                          <Mail className="w-3 h-3 text-slate-400 shrink-0" />
+                          <span className="truncate max-w-[160px] font-semibold">{drv.email || `${drv.id.toLowerCase()}@freshlane.com`}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[11px]">
+                          <Lock className="w-3 h-3 text-slate-400 shrink-0" />
+                          <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-700 font-bold">
+                            {drv.password ? (isPasswordShown ? drv.password : '••••••') : 'Default (PIN)'}
+                          </span>
+                          {drv.password && (
+                            <button
+                              type="button"
+                              onClick={() => togglePasswordVisibility(drv.id)}
+                              className="text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                              title={isPasswordShown ? 'Hide Password' : 'Show Password'}
+                            >
+                              {isPasswordShown ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleCopyCredentials(drv)}
+                            className="text-slate-400 hover:text-emerald-600 p-0.5 cursor-pointer"
+                            title="Copy Driver Login Details"
+                          >
+                            {copiedId === drv.id ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                          </button>
+                        </div>
+                      </div>
+                    </td>
 
-                  <td className="py-3">
-                    {drv.status === 'busy' ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                        <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-                        <span>En Route (#{drv.activeOrderId || 'FL-91428'})</span>
-                      </span>
-                    ) : drv.isOnline ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                        <span>Ready &amp; Online</span>
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
-                        <span>Offline</span>
-                      </span>
-                    )}
-                  </td>
+                    <td className="py-3">
+                      <div className="font-semibold text-slate-800">{drv.vehicleNumber}</div>
+                      <div className="text-[11px] text-slate-500">{drv.zone}</div>
+                    </td>
 
-                  <td className="py-3">
-                    <div className="flex items-center gap-1 font-mono font-bold text-slate-700">
-                      <Zap className="w-3.5 h-3.5 text-amber-500" />
-                      <span>{drv.batteryLevel}%</span>
-                    </div>
-                  </td>
+                    <td className="py-3">
+                      {drv.status === 'busy' ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                          <span>En Route (#{drv.activeOrderId || 'FL-91428'})</span>
+                        </span>
+                      ) : drv.isOnline ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          <span>Ready &amp; Online</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                          <span>Offline</span>
+                        </span>
+                      )}
+                    </td>
 
-                  <td className="py-3 font-semibold text-slate-700">
-                    {drv.deliveriesToday} drops (₹{drv.earningsToday})
-                  </td>
+                    <td className="py-3">
+                      <div className="flex items-center gap-1 font-mono font-bold text-slate-700">
+                        <Zap className="w-3.5 h-3.5 text-amber-500" />
+                        <span>{drv.batteryLevel}%</span>
+                      </div>
+                    </td>
 
-                  <td className="py-3">
-                    <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 text-[11px] font-bold">
-                      <Star className="w-3 h-3 fill-amber-400 text-amber-500" />
-                      <span>{drv.rating.toFixed(2)}</span>
-                    </div>
-                  </td>
+                    <td className="py-3 font-semibold text-slate-700">
+                      {drv.deliveriesToday} drops (₹{drv.earningsToday})
+                    </td>
 
-                  <td className="py-3 text-right pr-2">
-                    <button
-                      onClick={() => alert(`Direct dispatch call initiated to ${drv.name} (${drv.phone})`)}
-                      className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg cursor-pointer transition-colors"
-                    >
-                      Call Partner
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    <td className="py-3">
+                      <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 text-[11px] font-bold">
+                        <Star className="w-3 h-3 fill-amber-400 text-amber-500" />
+                        <span>{drv.rating.toFixed(2)}</span>
+                      </div>
+                    </td>
+
+                    <td className="py-3 text-right pr-2">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => alert(`Direct dispatch call initiated to ${drv.name} (${drv.phone})`)}
+                          className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg cursor-pointer transition-colors"
+                        >
+                          Call
+                        </button>
+                        <button
+                          onClick={() => handleDeleteDriver(drv.id)}
+                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg cursor-pointer transition-colors"
+                          title="Revoke & Delete Driver"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -378,9 +544,14 @@ export const AdminFleetView: React.FC<AdminFleetViewProps> = ({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
           <div className="w-full max-w-md bg-white border border-slate-200 rounded-3xl p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="font-extrabold text-base text-slate-900">
-                Register New Delivery Partner
-              </h3>
+              <div>
+                <h3 className="font-extrabold text-base text-slate-900">
+                  Register New Delivery Partner
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  Create driver login credentials for the Driver &amp; Staff portal.
+                </p>
+              </div>
               <button
                 onClick={() => setIsAddDriverOpen(false)}
                 className="text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
@@ -388,6 +559,13 @@ export const AdminFleetView: React.FC<AdminFleetViewProps> = ({
                 Cancel
               </button>
             </div>
+
+            {formError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-2xl flex items-center gap-2 text-red-700 text-xs font-semibold">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-red-500" />
+                <span>{formError}</span>
+              </div>
+            )}
 
             <form onSubmit={handleAddDriver} className="space-y-3 text-xs">
               <div>
@@ -397,18 +575,51 @@ export const AdminFleetView: React.FC<AdminFleetViewProps> = ({
                   required
                   value={newDriverName}
                   onChange={(e) => setNewDriverName(e.target.value)}
-                  placeholder="e.g. Sunil Reddy"
+                  placeholder="e.g. Ramesh Varma"
                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 text-slate-900"
                 />
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1 flex items-center gap-1">
+                    <Mail className="w-3 h-3 text-slate-500" />
+                    <span>Driver Mail ID</span>
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={newDriverEmail}
+                    onChange={(e) => setNewDriverEmail(e.target.value)}
+                    placeholder="ramesh@freshlane.com"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 text-slate-900 font-mono text-[11px]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1 flex items-center gap-1">
+                    <Key className="w-3 h-3 text-slate-500" />
+                    <span>Driver Password</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newDriverPassword}
+                    onChange={(e) => setNewDriverPassword(e.target.value)}
+                    placeholder="e.g. ramesh789"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 text-slate-900 font-mono text-[11px]"
+                  />
+                </div>
+              </div>
+
               <div>
-                <label className="block font-bold text-slate-800 mb-1">Mobile Number</label>
+                <label className="block font-bold text-slate-800 mb-1">Mobile Phone Number</label>
                 <input
                   type="tel"
                   required
                   value={newDriverPhone}
                   onChange={(e) => setNewDriverPhone(e.target.value)}
+                  placeholder="+91 98450 12345"
                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 text-slate-900 font-mono"
                 />
               </div>
@@ -421,7 +632,7 @@ export const AdminFleetView: React.FC<AdminFleetViewProps> = ({
                     required
                     value={newDriverVehicle}
                     onChange={(e) => setNewDriverVehicle(e.target.value)}
-                    placeholder="KA-01-EQ-9921"
+                    placeholder="AP-39-EQ-4421"
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 text-slate-900 font-mono"
                   />
                 </div>
@@ -433,7 +644,7 @@ export const AdminFleetView: React.FC<AdminFleetViewProps> = ({
                     onChange={(e) => setNewDriverType(e.target.value as any)}
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 text-slate-900 cursor-pointer"
                   >
-                    <option value="electric_scooter">Electric Scooter (Ather/Ola)</option>
+                    <option value="electric_scooter">Electric Scooter (EV)</option>
                     <option value="bike">Standard Bike</option>
                     <option value="van">Cargo Van</option>
                   </select>
@@ -447,10 +658,11 @@ export const AdminFleetView: React.FC<AdminFleetViewProps> = ({
                   onChange={(e) => setNewDriverZone(e.target.value)}
                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 text-slate-900 cursor-pointer"
                 >
-                  <option value="Indiranagar Hub">Indiranagar Hub (Zone 1)</option>
-                  <option value="Koramangala Hub">Koramangala Hub (Zone 2)</option>
-                  <option value="HSR Layout Hub">HSR Layout Hub (Zone 3)</option>
-                  <option value="Whitefield Hub">Whitefield Hub (Zone 4)</option>
+                  <option value="KN Road Hub (Tadepalligudem 534102)">KN Road Hub (Tadepalligudem 534102)</option>
+                  <option value="Subba Rao Peta Hub (Tadepalligudem 534102)">Subba Rao Peta Hub (Tadepalligudem 534102)</option>
+                  <option value="Pentapadu Hub (West Godavari 534166)">Pentapadu Hub (West Godavari 534166)</option>
+                  <option value="Housing Board Colony Hub (Tadepalligudem 534101)">Housing Board Colony Hub (Tadepalligudem 534101)</option>
+                  <option value="Railway Station & Main Bazaar (534102)">Railway Station &amp; Main Bazaar (534102)</option>
                 </select>
               </div>
 
@@ -464,9 +676,10 @@ export const AdminFleetView: React.FC<AdminFleetViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl shadow-xs cursor-pointer"
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5"
                 >
-                  Issue Partner Credentials
+                  <Key className="w-3.5 h-3.5" />
+                  <span>Create Driver Credentials</span>
                 </button>
               </div>
             </form>

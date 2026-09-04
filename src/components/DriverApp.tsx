@@ -23,70 +23,118 @@ import {
   User,
   Key
 } from 'lucide-react';
-import { DriverRecord, LocationCoords, OrderRecord } from '../types';
+import { DriverRecord, LocationCoords, OrderRecord, UserAccount } from '../types';
 import { LiveMap } from './LiveMap';
 import { getUserOrders } from '../utils/orderStore';
+import { getRegisteredDrivers } from '../utils/authStore';
 
 interface DriverAppProps {
+  user?: UserAccount | null;
   onGoToShop: () => void;
 }
 
-export const DriverApp: React.FC<DriverAppProps> = ({ onGoToShop }) => {
-  // Available Drivers for Admin Issued Credentials
-  const initialDrivers: DriverRecord[] = [
-    {
-      id: 'DRV-101',
-      name: 'Arjun Sharma',
-      phone: '+91 98450 12345',
-      vehicleNumber: 'KA-01-EQ-4421',
+export const DriverApp: React.FC<DriverAppProps> = ({ user, onGoToShop }) => {
+  // Load admin-created driver accounts from auth store
+  const [registeredDrivers, setRegisteredDrivers] = useState<DriverRecord[]>(() => {
+    const list = getRegisteredDrivers();
+    if (list.length > 0) {
+      return list.map((d) => ({
+        id: d.id,
+        name: d.name,
+        email: d.email,
+        phone: d.phone,
+        vehicleNumber: d.vehicleNumber || 'AP-39-EQ-4421',
+        vehicleType: d.vehicleType || 'electric_scooter',
+        zone: d.zone || 'KN Road, Tadepalligudem',
+        isOnline: true,
+        status: 'available',
+        rating: 5.0,
+        deliveriesToday: 0,
+        earningsToday: 0,
+        batteryLevel: 98,
+        currentCoords: { lat: 16.8145, lng: 81.5285, heading: 90, speed: 0 },
+      }));
+    }
+    // Fallback if none registered yet
+    return [];
+  });
+
+  const getActiveDriver = (): DriverRecord => {
+    if (user && user.role === 'driver') {
+      const match = registeredDrivers.find((d) => d.id === user.id || d.email === user.email);
+      if (match) return match;
+      return {
+        id: user.id || 'DRV-101',
+        name: user.name || 'Courier Rider',
+        email: user.email,
+        phone: user.phone || '+91 98450 12345',
+        vehicleNumber: user.vehicleNumber || 'AP-39-EQ-4421',
+        vehicleType: user.vehicleType || 'electric_scooter',
+        zone: user.zone || 'KN Road, Tadepalligudem',
+        isOnline: true,
+        status: 'available',
+        rating: 5.0,
+        deliveriesToday: 0,
+        earningsToday: 0,
+        batteryLevel: 98,
+        currentCoords: { lat: 16.8145, lng: 81.5285, heading: 90, speed: 0 },
+      };
+    }
+    if (registeredDrivers.length > 0) {
+      return registeredDrivers[0];
+    }
+    return {
+      id: 'DRV-NEW',
+      name: 'Unassigned Driver',
+      email: 'driver@freshlane.com',
+      phone: '+91 99000 00000',
+      vehicleNumber: 'AP-39-PENDING',
       vehicleType: 'electric_scooter',
-      zone: 'Indiranagar Hub',
-      isOnline: true,
-      status: 'busy',
-      rating: 4.95,
-      deliveriesToday: 9,
-      earningsToday: 765,
-      batteryLevel: 84,
-      currentCoords: { lat: 12.9735, lng: 77.6442, heading: 110, speed: 24 },
-      activeOrderId: 'FL-91428',
-    },
-    {
-      id: 'DRV-102',
-      name: 'Farah Khan',
-      phone: '+91 97312 65432',
-      vehicleNumber: 'KA-03-MM-8921',
-      vehicleType: 'electric_scooter',
-      zone: 'Koramangala Hub',
-      isOnline: true,
-      status: 'available',
-      rating: 4.91,
-      deliveriesToday: 7,
-      earningsToday: 595,
-      batteryLevel: 92,
-      currentCoords: { lat: 12.9352, lng: 77.6245, heading: 45, speed: 0 },
-    },
-    {
-      id: 'DRV-103',
-      name: 'Vishal Patel',
-      phone: '+91 98860 99881',
-      vehicleNumber: 'KA-05-AB-3319',
-      vehicleType: 'bike',
-      zone: 'HSR Layout Hub',
+      zone: 'KN Road Hub, Tadepalligudem',
       isOnline: false,
       status: 'offline',
-      rating: 4.88,
-      deliveriesToday: 6,
-      earningsToday: 510,
-      batteryLevel: 76,
-      currentCoords: { lat: 12.9121, lng: 77.6445, heading: 0, speed: 0 },
-    },
-  ];
+      rating: 5.0,
+      deliveriesToday: 0,
+      earningsToday: 0,
+      batteryLevel: 100,
+      currentCoords: { lat: 16.8145, lng: 81.5285, heading: 0, speed: 0 },
+    };
+  };
 
-  const [currentDriver, setCurrentDriver] = useState<DriverRecord>(initialDrivers[0]);
+  const [currentDriver, setCurrentDriver] = useState<DriverRecord>(getActiveDriver);
   const [activeTab, setActiveTab] = useState<'delivery' | 'earnings' | 'settings'>('delivery');
   const [isOnline, setIsOnline] = useState(currentDriver.isOnline);
-  const [activeOrderId, setActiveOrderId] = useState<string | null>(currentDriver.activeOrderId || 'FL-91428');
+  const [activeOrderId, setActiveOrderId] = useState<string | null>(currentDriver.activeOrderId || null);
   const [orderStatus, setOrderStatus] = useState<'assigned' | 'picked_up' | 'on_the_way' | 'delivered'>('on_the_way');
+
+  // Listen to driver store updates
+  useEffect(() => {
+    const handleUpdate = () => {
+      const list = getRegisteredDrivers();
+      if (list.length > 0) {
+        const mapped: DriverRecord[] = list.map((d) => ({
+          id: d.id,
+          name: d.name,
+          email: d.email,
+          phone: d.phone,
+          vehicleNumber: d.vehicleNumber || 'AP-39-EQ-4421',
+          vehicleType: d.vehicleType || 'electric_scooter',
+          zone: d.zone || 'KN Road, Tadepalligudem',
+          isOnline: true,
+          status: 'available',
+          rating: 5.0,
+          deliveriesToday: 0,
+          earningsToday: 0,
+          batteryLevel: 98,
+          currentCoords: { lat: 16.8145, lng: 81.5285, heading: 90, speed: 0 },
+        }));
+        setRegisteredDrivers(mapped);
+      }
+    };
+
+    window.addEventListener('freshlane_drivers_updated', handleUpdate);
+    return () => window.removeEventListener('freshlane_drivers_updated', handleUpdate);
+  }, []);
 
   // Network & Battery & Background Simulation State
   const [isNetworkOnline, setIsNetworkOnline] = useState(true);
@@ -405,24 +453,28 @@ export const DriverApp: React.FC<DriverAppProps> = ({ onGoToShop }) => {
           </button>
 
           {/* Driver Switcher */}
-          <select
-            value={currentDriver.id}
-            onChange={(e) => {
-              const selected = initialDrivers.find((d) => d.id === e.target.value);
-              if (selected) {
-                setCurrentDriver(selected);
-                setIsOnline(selected.isOnline);
-                setActiveOrderId(selected.activeOrderId || null);
-              }
-            }}
-            className="bg-slate-800 text-slate-200 rounded px-1.5 py-0.5 text-[10px] focus:outline-none cursor-pointer"
-          >
-            {initialDrivers.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name.split(' ')[0]} ({d.zone.split(' ')[0]})
-              </option>
-            ))}
-          </select>
+          {registeredDrivers.length > 0 ? (
+            <select
+              value={currentDriver.id}
+              onChange={(e) => {
+                const selected = registeredDrivers.find((d) => d.id === e.target.value);
+                if (selected) {
+                  setCurrentDriver(selected);
+                  setIsOnline(selected.isOnline);
+                  setActiveOrderId(selected.activeOrderId || null);
+                }
+              }}
+              className="bg-slate-800 text-slate-200 rounded px-1.5 py-0.5 text-[10px] focus:outline-none cursor-pointer"
+            >
+              {registeredDrivers.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name.split(' ')[0]} ({d.id})
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className="text-[10px] text-amber-400">Driver Mode</span>
+          )}
         </div>
       </div>
 

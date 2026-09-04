@@ -10,6 +10,8 @@ export interface LatLng {
 export interface DriverEntity {
   id: string;
   name: string;
+  email?: string;
+  password?: string;
   phone: string;
   vehicleNumber: string;
   vehicleType: "electric_scooter" | "bike" | "van";
@@ -506,6 +508,11 @@ export function addDriver(driver: Omit<DriverEntity, "id" | "lastPingTime">): Dr
   };
   driversDatabase.set(id, newDrv);
   return newDrv;
+}
+
+// Delete driver
+export function deleteDriver(id: string): boolean {
+  return driversDatabase.delete(id);
 }
 
 // Submit Customer Rating & Feedback

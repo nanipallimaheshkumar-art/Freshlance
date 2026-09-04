@@ -59,6 +59,9 @@ export interface UserAccount {
   neighbourhood?: string;
   registeredAt: string;
   isVerified?: boolean;
+  vehicleNumber?: string;
+  vehicleType?: 'electric_scooter' | 'bike' | 'van';
+  zone?: string;
 }
 
 export interface OrderItemRecord {
@@ -119,6 +122,8 @@ export interface OrderRecord {
 export interface DriverRecord {
   id: string;
   name: string;
+  email?: string;
+  password?: string;
   phone: string;
   vehicleNumber: string;
   vehicleType: 'electric_scooter' | 'bike' | 'van';

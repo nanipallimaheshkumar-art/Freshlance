@@ -1,6 +1,10 @@
 {
   "name": "FreshLane Produce & AI Grocery Scanner",
   "description": "Ultra-fast 30-minute fresh fruit and vegetable marketplace with live GPS driver tracking, real-time dispatch backend, driver mobile app, and admin fleet operations.",
-  "requestFramePermissions": ["geolocation"],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

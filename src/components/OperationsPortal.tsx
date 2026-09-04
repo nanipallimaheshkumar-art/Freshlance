@@ -101,21 +101,6 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({
     }, 400);
   };
 
-  // Quick Demo Auto-fill helpers for staff testing
-  const handleFillDemoAdmin = () => {
-    setStaffRoleTab('owner');
-    setIdentifier('owner@freshlane.com');
-    setPasscode('ownerpass123');
-    setAuthError(null);
-  };
-
-  const handleFillDemoDriver = () => {
-    setStaffRoleTab('driver');
-    setIdentifier('driver@freshlane.com');
-    setPasscode('driverpass123');
-    setAuthError(null);
-  };
-
   const handleStaffSignOut = () => {
     clearCurrentSession();
     setCurrentStaffUser(null);
@@ -224,27 +209,32 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({
             <form onSubmit={handleStaffLogin} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">
-                  {staffRoleTab === 'owner' ? 'Admin Email / ID' : 'Driver ID / Phone Number'}
+                  {staffRoleTab === 'owner' ? 'Store Admin Email ID' : 'Driver Email ID or Driver ID'}
                 </label>
                 <input
-                  type="text"
+                  type={staffRoleTab === 'owner' ? 'email' : 'text'}
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder={staffRoleTab === 'owner' ? 'owner@freshlane.com' : 'DRV-101 or driver@freshlane.com'}
+                  placeholder={staffRoleTab === 'owner' ? 'nanipallimaheshkumar@gmail.com' : 'e.g. driver email or DRV-101'}
                   className="w-full h-11 px-3.5 text-xs bg-slate-950 border border-slate-700 rounded-xl outline-none focus:border-emerald-500 text-white placeholder:text-slate-600 font-medium transition-all"
                   required
                 />
+                <p className="mt-1 text-[11px] text-slate-500">
+                  {staffRoleTab === 'owner'
+                    ? 'Owner desk is restricted strictly to nanipallimaheshkumar@gmail.com.'
+                    : 'Driver credentials must be created by Store Admin in the Admin Portal.'}
+                </p>
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">
-                  {staffRoleTab === 'owner' ? 'Admin Security Passcode' : 'Driver PIN Code'}
+                  {staffRoleTab === 'owner' ? 'Admin 6-Digit Security Code' : 'Driver Password / PIN'}
                 </label>
                 <input
                   type="password"
                   value={passcode}
                   onChange={(e) => setPasscode(e.target.value)}
-                  placeholder="••••••••"
+                  placeholder={staffRoleTab === 'owner' ? 'Security code (e.g. 132908)' : 'Password assigned by Store Admin'}
                   className="w-full h-11 px-3.5 text-xs bg-slate-950 border border-slate-700 rounded-xl outline-none focus:border-emerald-500 text-white placeholder:text-slate-600 font-medium transition-all"
                   required
                 />
@@ -256,7 +246,7 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({
                 className="w-full h-11 mt-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 shadow-lg transition-colors cursor-pointer disabled:opacity-50"
               >
                 {authLoading ? (
-                  <span>Authenticating Staff Credentials...</span>
+                  <span>Authenticating Credentials...</span>
                 ) : (
                   <>
                     <ShieldCheck className="w-4 h-4" />
@@ -266,25 +256,19 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({
               </button>
             </form>
 
-            {/* Quick Demo Test Buttons */}
-            <div className="mt-5 pt-4 border-t border-slate-800 space-y-2 text-center">
-              <p className="text-[11px] text-slate-500 font-medium">Quick Evaluator Staff Credentials:</p>
-              <div className="flex flex-wrap gap-2 justify-center">
-                <button
-                  type="button"
-                  onClick={handleFillDemoAdmin}
-                  className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] text-emerald-400 font-semibold border border-slate-700 cursor-pointer transition-colors"
-                >
-                  Fill Demo Admin (owner@freshlane.com)
-                </button>
-                <button
-                  type="button"
-                  onClick={handleFillDemoDriver}
-                  className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] text-emerald-400 font-semibold border border-slate-700 cursor-pointer transition-colors"
-                >
-                  Fill Demo Driver (driver@freshlane.com)
-                </button>
-              </div>
+            {/* Security Notice */}
+            <div className="mt-5 pt-4 border-t border-slate-800 text-center">
+              <p className="text-[11px] text-slate-400 font-medium">
+                {staffRoleTab === 'owner' ? (
+                  <span>
+                    Owner Login: <span className="text-emerald-400 font-mono">nanipallimaheshkumar@gmail.com</span>
+                  </span>
+                ) : (
+                  <span>
+                    Need driver credentials? The Store Admin adds driver logins with email and password from the Admin Portal.
+                  </span>
+                )}
+              </p>
             </div>
 
             {/* Return to Customer Portal */}
@@ -412,7 +396,7 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({
           </div>
         ) : (
           <div className="py-6 px-4 max-w-7xl mx-auto">
-            <DriverApp onGoToShop={onSwitchToCustomerWeb} />
+            <DriverApp user={currentStaffUser} onGoToShop={onSwitchToCustomerWeb} />
           </div>
         )}
       </div>

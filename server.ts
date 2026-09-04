@@ -11,6 +11,7 @@ import {
   setDriverOnline,
   getAllDrivers,
   addDriver,
+  deleteDriver,
   submitOrderRating,
   getDispatchAnalytics,
   registerSSEClient,
@@ -377,27 +378,36 @@ app.get("/api/drivers", (_req, res) => {
 
 // 7. Add driver (Admin)
 app.post("/api/admin/driver", (req, res) => {
-  const { name, phone, vehicleNumber, vehicleType, zone } = req.body;
-  if (!name || !phone || !vehicleNumber || !zone) {
+  const { name, email, password, phone, vehicleNumber, vehicleType, zone } = req.body;
+  if (!name || !phone || !vehicleNumber) {
     return res.status(400).json({ error: "Missing required driver fields" });
   }
 
   const newDriver = addDriver({
     name,
+    email: email || "",
+    password: password || "",
     phone,
     vehicleNumber,
     vehicleType: vehicleType || "electric_scooter",
-    zone,
+    zone: zone || "KN Road, Tadepalligudem",
     isOnline: true,
     status: "available",
     rating: 5.0,
     deliveriesToday: 0,
     earningsToday: 0,
     batteryLevel: 100,
-    currentCoords: { lat: 12.9784, lng: 77.6408, heading: 0, speed: 0 },
+    currentCoords: { lat: 16.8145, lng: 81.5285, heading: 0, speed: 0 },
   });
 
   return res.json({ success: true, driver: newDriver });
+});
+
+// 7b. Delete driver (Admin)
+app.delete("/api/admin/driver/:id", (req, res) => {
+  const driverId = req.params.id;
+  const deleted = deleteDriver(driverId);
+  return res.json({ success: deleted });
 });
 
 // 8. Submit Customer Delivery Rating & Feedback
