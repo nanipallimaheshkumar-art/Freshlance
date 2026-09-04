@@ -317,21 +317,21 @@ export default function App() {
                     setOpsSubApp('admin');
                     setActiveWeb('operations');
                   }}
-                  className="text-emerald-400 hover:text-emerald-300 font-semibold cursor-pointer transition-colors flex items-center gap-1"
+                  className="text-slate-400 hover:text-emerald-400 font-medium cursor-pointer transition-colors flex items-center gap-1.5 text-[11px]"
                 >
-                  <span>Admin &amp; Driver Web ↗</span>
+                  <span>🔒 Staff Operations Portal (Restricted) ↗</span>
                 </button>
               </li>
             </ul>
           </div>
 
           <div className="space-y-2">
-            <h4 className="font-bold text-[11px] uppercase tracking-wider text-emerald-400">Delivery Zones</h4>
+            <h4 className="font-bold text-[11px] uppercase tracking-wider text-emerald-400">Delivery Zones (India 🇮🇳)</h4>
             <p className="text-slate-400 leading-relaxed text-[11px]">
-              Indiranagar · Koramangala · HSR Layout · Whitefield · Jayanagar · Malleshwaram.
+              KN Road · Subba Rao Peta · Pentapadu · Housing Board Colony · Prathipadu · Tadepalligudem Hub (534102, Andhra Pradesh, India).
             </p>
-            <p className="text-[11px] text-slate-500 pt-2">
-              Our riders are equipped with temperature-safe insulated bags for crunch-fresh arrivals.
+            <p className="text-[11px] text-emerald-400 font-medium pt-1">
+              ⚡ 15 km Radius Strict Hub Restriction
             </p>
           </div>
         </div>

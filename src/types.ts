@@ -50,11 +50,15 @@ export interface UserAccount {
   name: string;
   email: string;
   phone?: string;
-  role: 'shopper' | 'owner';
+  role: 'shopper' | 'owner' | 'driver';
   address?: string;
   city?: string;
+  state?: string;
+  country?: string;
+  pincode?: string;
   neighbourhood?: string;
   registeredAt: string;
+  isVerified?: boolean;
 }
 
 export interface OrderItemRecord {

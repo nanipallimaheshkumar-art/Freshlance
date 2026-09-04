@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShoppingBag, User, LogOut, Store, Search, Clock, Package, CheckCircle2, Bike, Navigation } from 'lucide-react';
+import { ShoppingBag, User, LogOut, Store, Search, Clock, Package, CheckCircle2, Bike, Navigation, Lock, ShieldCheck } from 'lucide-react';
 import { UserAccount } from '../types';
 
 interface HeaderProps {
@@ -39,13 +39,34 @@ export const Header: React.FC<HeaderProps> = ({
             <span>✓ Razorpay Protected</span>
             <span className="text-emerald-400 font-medium">📍 Tadepalligudem Hub (534102 · 15km Radius Only)</span>
             {onOpenOperationsPortal && (
-              <button
-                onClick={onOpenOperationsPortal}
-                className="text-slate-400 hover:text-emerald-400 cursor-pointer flex items-center gap-1 transition-colors border-l border-slate-700 pl-3 ml-1"
-                title="Open separate Admin and Driver Operations Web"
-              >
-                <span>Admin &amp; Driver Web ↗</span>
-              </button>
+              user?.role === 'owner' ? (
+                <button
+                  onClick={onOpenOperationsPortal}
+                  className="text-emerald-300 hover:text-white bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/40 px-2 py-0.5 rounded-md cursor-pointer flex items-center gap-1 transition-colors border-l border-slate-700 pl-2 ml-1 text-[10px] font-bold"
+                  title="Authorized Store Administrator Desk"
+                >
+                  <Store className="w-3 h-3 text-emerald-400" />
+                  <span>Admin Desk ↗</span>
+                </button>
+              ) : user?.role === 'driver' ? (
+                <button
+                  onClick={onOpenOperationsPortal}
+                  className="text-emerald-300 hover:text-white bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/40 px-2 py-0.5 rounded-md cursor-pointer flex items-center gap-1 transition-colors border-l border-slate-700 pl-2 ml-1 text-[10px] font-bold"
+                  title="Courier Delivery Telematics Console"
+                >
+                  <Bike className="w-3 h-3 text-emerald-400" />
+                  <span>Driver App ↗</span>
+                </button>
+              ) : (
+                <button
+                  onClick={onOpenOperationsPortal}
+                  className="text-slate-400 hover:text-slate-200 cursor-pointer flex items-center gap-1 transition-colors border-l border-slate-700 pl-3 ml-1 text-[10px]"
+                  title="Restricted Staff Portal for Store Admins &amp; Delivery Drivers"
+                >
+                  <Lock className="w-2.5 h-2.5 text-slate-500" />
+                  <span>Staff Login ↗</span>
+                </button>
+              )
             )}
           </div>
         </div>

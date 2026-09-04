@@ -67,8 +67,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               ✦
             </div>
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold mb-2 border border-emerald-200/60">
-              <User className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Customer Portal</span>
+              <span>🇮🇳</span>
+              <span>Customer Portal · India (Tadepalligudem Hub)</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
               Customer Sign In
@@ -210,9 +210,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             <div>
               <button
                 onClick={onOpenOperationsPortal}
-                className="text-[11px] font-medium text-slate-400 hover:text-emerald-600 cursor-pointer transition-colors"
+                className="text-[11px] font-medium text-slate-400 hover:text-emerald-600 cursor-pointer transition-colors inline-flex items-center gap-1.5"
               >
-                Store Manager or Delivery Partner? Open Admin &amp; Driver Web ↗
+                <Lock className="w-3 h-3 text-slate-400" />
+                <span>Authorized Staff Portal (Store Admin &amp; Driver Authentication) ↗</span>
               </button>
             </div>
           )}
