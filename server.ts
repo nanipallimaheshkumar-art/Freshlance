@@ -88,7 +88,7 @@ app.get("/api/health", (_req, res) => {
     hubCoords: FRESHLANE_HUB_COORDS,
     hasApiKey: Boolean(process.env.GEMINI_API_KEY),
     hasRazorpayConfig: Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET),
-    razorpayKeyId: process.env.RAZORPAY_KEY_ID || "rzp_test_TXoUBcTgIq9Wfa",
+    razorpayKeyId: process.env.RAZORPAY_KEY_ID || "rzp_live_TXuXQYEDf7QJgT",
     timestamp: new Date().toISOString(),
   });
 });
