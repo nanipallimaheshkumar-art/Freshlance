@@ -20,6 +20,7 @@ import {
 import { CartItem, UserAccount } from '../types';
 import { saveUserOrder } from '../utils/orderStore';
 import { checkDeliveryEligibility, DeliveryEligibilityResult, TADEPALLIGUDEM_ZONE_AREAS } from '../utils/deliveryZone';
+import { useFreeDeliveryPromotion } from '../utils/freeDeliveryPromo';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -183,8 +184,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     );
   };
 
+  const { isFreeDeliveryActive, formattedTime, calculateDeliveryFee } = useFreeDeliveryPromotion();
+
   const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);
-  const deliveryFee = subtotal >= 299 || subtotal === 0 ? 0 : 35;
+  const deliveryFee = calculateDeliveryFee(subtotal);
   const grandTotal = subtotal + deliveryFee;
 
   const handleSaveCustomKey = (key: string, cfUrl?: string) => {
@@ -743,7 +746,13 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs space-y-1.5">
                 <div className="font-semibold text-slate-900 mb-1 flex items-center justify-between">
                   <span>Items Summary ({items.length})</span>
-                  <span className="text-[11px] text-emerald-600 font-bold">Free 30-min Delivery</span>
+                  {isFreeDeliveryActive ? (
+                    <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <span>⚡ Free Delivery Active ({formattedTime})</span>
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-emerald-600 font-bold">30-Min Fast Delivery</span>
+                  )}
                 </div>
                 {items.slice(0, 3).map((item) => (
                   <div key={item.id} className="flex justify-between text-slate-600">
@@ -756,6 +765,34 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 {items.length > 3 && (
                   <p className="text-[11px] text-slate-500 italic">+ {items.length - 3} more fresh items</p>
                 )}
+
+                <div className="pt-2 border-t border-slate-200 space-y-1">
+                  <div className="flex justify-between text-slate-500">
+                    <span>Subtotal</span>
+                    <span className="font-semibold text-slate-800">₹{subtotal}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-slate-500">
+                    <span className="flex items-center gap-1">
+                      <span>Delivery Fee</span>
+                      {isFreeDeliveryActive && (
+                        <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.2 rounded">
+                          FLASH OFFER
+                        </span>
+                      )}
+                    </span>
+                    <span className={deliveryFee === 0 ? 'text-emerald-600 font-bold' : 'text-slate-900'}>
+                      {deliveryFee === 0 ? (
+                        <span className="flex items-center gap-1">
+                          <span className="line-through text-slate-400 font-normal text-[11px]">₹35</span>
+                          <span className="text-emerald-600 font-black">FREE (₹0)</span>
+                        </span>
+                      ) : (
+                        `₹${deliveryFee}`
+                      )}
+                    </span>
+                  </div>
+                </div>
+
                 <div className="pt-2 border-t border-slate-200 flex justify-between font-extrabold text-slate-900 text-sm">
                   <span>Grand Total</span>
                   <span className="text-emerald-600">₹{grandTotal}</span>

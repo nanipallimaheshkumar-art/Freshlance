@@ -1,6 +1,7 @@
 import React from 'react';
-import { X, Plus, Minus, Trash2, ArrowRight, Sparkles, Clock, ShieldCheck } from 'lucide-react';
+import { X, Plus, Minus, Trash2, ArrowRight, Sparkles, Clock, ShieldCheck, Zap } from 'lucide-react';
 import { CartItem } from '../types';
+import { useFreeDeliveryPromotion } from '../utils/freeDeliveryPromo';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -19,10 +20,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   onRemoveItem,
   onCheckout,
 }) => {
+  const { isFreeDeliveryActive, formattedTime, calculateDeliveryFee } = useFreeDeliveryPromotion();
+
   if (!isOpen) return null;
 
   const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);
-  const deliveryFee = subtotal >= 299 || subtotal === 0 ? 0 : 35;
+  const deliveryFee = calculateDeliveryFee(subtotal);
   const grandTotal = subtotal + deliveryFee;
   const itemCount = items.reduce((sum, item) => sum + item.qty, 0);
 
@@ -136,18 +139,55 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           {/* Footer with Subtotal & Checkout */}
           {items.length > 0 && (
             <div className="p-4 border-t border-slate-200 bg-white space-y-3">
+              {/* 15-Min Free Delivery Flash Banner */}
+              {isFreeDeliveryActive && (
+                <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-xs animate-fadeIn">
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0">
+                      ⚡
+                    </span>
+                    <div>
+                      <div className="font-bold text-emerald-950 text-[11px] flex items-center gap-1">
+                        <span>Free Delivery Flash Offer</span>
+                        <span className="bg-emerald-200/80 text-emerald-800 text-[9px] px-1.5 py-0.2 rounded font-mono font-bold">
+                          {formattedTime}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-emerald-700">₹0 delivery charge on all orders</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-black text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-300">
+                    SAVE ₹35
+                  </span>
+                </div>
+              )}
+
               <div className="space-y-1.5 text-xs">
                 <div className="flex justify-between text-slate-500">
                   <span>Subtotal</span>
                   <span className="font-bold text-slate-900">₹{subtotal}</span>
                 </div>
-                <div className="flex justify-between text-slate-500">
-                  <span>Delivery (FreshLane Fleet)</span>
+                <div className="flex justify-between text-slate-500 items-center">
+                  <span className="flex items-center gap-1">
+                    <span>Delivery (FreshLane Fleet)</span>
+                    {isFreeDeliveryActive && (
+                      <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.2 rounded">
+                        15-MIN FLASH
+                      </span>
+                    )}
+                  </span>
                   <span className={deliveryFee === 0 ? 'text-emerald-600 font-bold' : 'text-slate-900'}>
-                    {deliveryFee === 0 ? 'FREE' : `₹${deliveryFee}`}
+                    {deliveryFee === 0 ? (
+                      <span className="flex items-center gap-1">
+                        <span className="line-through text-slate-400 font-normal text-[11px]">₹35</span>
+                        <span className="text-emerald-600 font-black">FREE</span>
+                      </span>
+                    ) : (
+                      `₹${deliveryFee}`
+                    )}
                   </span>
                 </div>
-                {deliveryFee > 0 && (
+                {!isFreeDeliveryActive && deliveryFee > 0 && (
                   <p className="text-[10px] text-emerald-600 italic">
                     Add ₹{299 - subtotal} more for Free Delivery
                   </p>

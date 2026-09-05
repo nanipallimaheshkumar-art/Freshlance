@@ -1,6 +1,7 @@
 import React from 'react';
-import { ShoppingBag, User, LogOut, Store, Search, Clock, Package, CheckCircle2, Bike, Navigation, Lock, ShieldCheck } from 'lucide-react';
+import { ShoppingBag, User, LogOut, Store, Search, Clock, Package, CheckCircle2, Bike, Navigation, Lock, ShieldCheck, Zap } from 'lucide-react';
 import { UserAccount } from '../types';
+import { useFreeDeliveryPromotion } from '../utils/freeDeliveryPromo';
 
 interface HeaderProps {
   currentTab: 'shop' | 'orders' | 'tracking' | 'login' | 'register';
@@ -25,19 +26,36 @@ export const Header: React.FC<HeaderProps> = ({
   setSearchQuery,
   onOpenOperationsPortal,
 }) => {
+  const { isFreeDeliveryActive, formattedTime } = useFreeDeliveryPromotion();
+
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200">
       {/* Top express banner */}
-      <div className="bg-slate-900 text-slate-300 text-xs font-medium py-1.5 px-4">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
+      <div className={`${isFreeDeliveryActive ? 'bg-gradient-to-r from-emerald-900 via-slate-900 to-emerald-950 text-emerald-100' : 'bg-slate-900 text-slate-300'} text-xs font-medium py-1.5 px-4 transition-colors`}>
+        <div className="max-w-6xl mx-auto flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
-            <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span>⚡ Express Delivery: Fresh produce to your doorstep in <strong className="text-white font-semibold">24–30 minutes</strong></span>
+            {isFreeDeliveryActive ? (
+              <>
+                <span className="inline-flex items-center gap-1 bg-emerald-500 text-slate-950 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider animate-pulse">
+                  ⚡ 15-MIN FLASH
+                </span>
+                <span className="text-white font-semibold">
+                  100% FREE DELIVERY ON ALL ORDERS!
+                </span>
+                <span className="bg-emerald-400/20 text-emerald-300 font-mono font-bold text-[11px] px-2 py-0.5 rounded border border-emerald-400/30">
+                  ⏳ {formattedTime} left
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>⚡ Express Delivery: Fresh produce to your doorstep in <strong className="text-white font-semibold">24–30 minutes</strong></span>
+              </>
+            )}
           </div>
-          <div className="hidden sm:flex items-center gap-4 text-slate-400 text-[11px]">
-            <span>✓ Daily Market Rates</span>
-            <span>✓ Razorpay Protected</span>
-            <span className="text-emerald-400 font-medium">📍 Tadepalligudem Hub (534102 · 15km Radius Only)</span>
+          <div className="hidden sm:flex items-center gap-4 text-slate-300 text-[11px]">
+            <span className="text-emerald-400 font-medium">📍 Tadepalligudem (534102 · 15km Zone)</span>
+            <span>✓ Razorpay Live</span>
             {onOpenOperationsPortal && (
               user?.role === 'owner' ? (
                 <button
