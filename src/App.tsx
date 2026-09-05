@@ -451,6 +451,7 @@ export default function App() {
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
         onOpenContact={() => setIsContactOpen(true)}
+        onNavigateToPortal={(path) => navigateToRoute(path)}
       />
 
       {/* Customer View Router */}

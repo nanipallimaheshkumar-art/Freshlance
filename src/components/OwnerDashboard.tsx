@@ -24,7 +24,9 @@ import {
   Users,
   BarChart3,
   MapPin,
-  UserCheck
+  UserCheck,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { UserAccount, ProduceItem, OrderRecord } from '../types';
 import {
@@ -134,6 +136,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ user, onGoToShop
     return import.meta.env.VITE_RAZORPAY_KEY_ID || decodeFallback('cnpwX2xpdmVfVFlDSmlTT1YwVHBDc2U=');
   });
   const [razorpaySaved, setRazorpaySaved] = useState(false);
+  const [showKey, setShowKey] = useState(false);
 
   // Order management state
   const [orders, setOrders] = useState(() => getUserOrders());
@@ -662,17 +665,29 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ user, onGoToShop
 
           <form onSubmit={handleSaveRazorpayKey} className="space-y-4 pt-2 border-t border-slate-100">
             <div>
-              <label className="block text-xs font-bold text-slate-800 mb-1.5">
-                Razorpay Key ID
-              </label>
-              <input
-                type="text"
-                value={razorpayKey}
-                onChange={(e) => setRazorpayKey(e.target.value)}
-                placeholder="rzp_live_..."
-                className="w-full text-xs font-mono p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 text-slate-900"
-                required
-              />
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold text-slate-800">
+                  Razorpay Key ID
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowKey(!showKey)}
+                  className="text-xs text-slate-500 hover:text-slate-800 flex items-center gap-1 font-medium cursor-pointer"
+                >
+                  {showKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  <span>{showKey ? 'Hide' : 'Reveal'}</span>
+                </button>
+              </div>
+              <div className="relative">
+                <input
+                  type={showKey ? 'text' : 'password'}
+                  value={razorpayKey}
+                  onChange={(e) => setRazorpayKey(e.target.value)}
+                  placeholder="rzp_live_..."
+                  className="w-full text-xs font-mono p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 text-slate-900"
+                  required
+                />
+              </div>
               <p className="text-[11px] text-slate-400 mt-1.5">
                 Found on your Razorpay Dashboard under <strong className="text-slate-700">Settings → API Keys</strong>. Both live keys and test keys are fully supported.
               </p>

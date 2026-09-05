@@ -16,11 +16,14 @@ import {
   Navigation,
   AlertCircle,
   Loader2,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { CartItem, UserAccount } from '../types';
 import { saveUserOrder } from '../utils/orderStore';
 import { checkDeliveryEligibility, DeliveryEligibilityResult, TADEPALLIGUDEM_ZONE_AREAS } from '../utils/deliveryZone';
 import { useFreeDeliveryPromotion } from '../utils/freeDeliveryPromo';
+import { normalizeRole } from '../utils/rbac';
 
 function decodeFallback(b64: string): string {
   try {
@@ -89,6 +92,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [cloudflareWorkerUrl, setCloudflareWorkerUrl] = useState<string>(() => {
     return localStorage.getItem('freshlane_cloudflare_url') || '';
   });
+  const [showSecretKey, setShowSecretKey] = useState(false);
+  const isAdminUser = normalizeRole(user?.role) === 'admin';
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
   const [locationSuccessMsg, setLocationSuccessMsg] = useState<string | null>(null);
 
@@ -317,7 +322,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         (razorpayKeyId && typeof razorpayKeyId === 'string' && razorpayKeyId.startsWith('rzp_live_') ? razorpayKeyId : null) ||
         LIVE_RAZORPAY_KEY;
 
-      console.log('[FreshLane Razorpay Live Mode] Using live key:', activeKey, 'Order ID:', order_id);
+      console.log('[FreshLane Razorpay Gateway] Initializing secure checkout. Order ID:', order_id);
 
       const options = {
         key: activeKey,
@@ -616,31 +621,43 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   <label className="text-xs font-semibold text-slate-800">
                     Choose Payment Method
                   </label>
-                  <button
-                    type="button"
-                    onClick={() => setCustomKeyOpen(!customKeyOpen)}
-                    className="text-[10px] text-slate-500 hover:text-emerald-600 flex items-center gap-1 font-medium cursor-pointer"
-                  >
-                    <Settings className="w-3 h-3" />
-                    <span>Razorpay &amp; Cloudflare ({razorpayKeyId ? 'Configured' : 'Default'})</span>
-                  </button>
+                  {isAdminUser && (
+                    <button
+                      type="button"
+                      onClick={() => setCustomKeyOpen(!customKeyOpen)}
+                      className="text-[10px] text-slate-500 hover:text-emerald-600 flex items-center gap-1 font-medium cursor-pointer"
+                    >
+                      <Settings className="w-3 h-3" />
+                      <span>Gateway Settings (Admin)</span>
+                    </button>
+                  )}
                 </div>
 
-                {/* Razorpay Key Configuration collapse */}
-                {customKeyOpen && (
+                {/* Razorpay Key Configuration collapse (Admin only) */}
+                {isAdminUser && customKeyOpen && (
                   <div className="mb-3 p-3 bg-slate-900 text-white rounded-xl text-xs space-y-2.5">
                     <div className="font-bold flex items-center justify-between">
-                      <span>Direct Razorpay &amp; Cloudflare</span>
-                      <span className="text-[10px] text-emerald-400 font-mono">Custom API</span>
+                      <span>Gateway Configuration</span>
+                      <span className="text-[10px] text-emerald-400 font-mono">Admin Only</span>
                     </div>
                     <p className="text-[11px] text-slate-400">
-                      Use your direct Razorpay Key ID and optional Cloudflare Worker URL to process transactions via your Cloudflare worker:
+                      Configure custom API credentials. Keys are encrypted and hidden from customer checkout views.
                     </p>
                     <div className="space-y-1.5">
                       <div>
-                        <label className="text-[10px] text-slate-400 block mb-0.5">Razorpay Key ID (Live)</label>
+                        <div className="flex items-center justify-between mb-0.5">
+                          <label className="text-[10px] text-slate-400 block">Razorpay Key ID</label>
+                          <button
+                            type="button"
+                            onClick={() => setShowSecretKey(!showSecretKey)}
+                            className="text-[10px] text-slate-400 hover:text-emerald-400 flex items-center gap-1 cursor-pointer"
+                          >
+                            {showSecretKey ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                            <span>{showSecretKey ? 'Hide' : 'Reveal'}</span>
+                          </button>
+                        </div>
                         <input
-                          type="text"
+                          type={showSecretKey ? 'text' : 'password'}
                           defaultValue={razorpayKeyId}
                           id="razorpay-key-input"
                           placeholder="rzp_live_..."
@@ -648,7 +665,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] text-slate-400 block mb-0.5">Cloudflare Worker URL (optional, leave blank to use built-in backend)</label>
+                        <label className="text-[10px] text-slate-400 block mb-0.5">Cloudflare Worker URL (optional)</label>
                         <input
                           type="text"
                           defaultValue={cloudflareWorkerUrl}
@@ -700,9 +717,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                           <div className="text-[11px] text-slate-500">
                             UPI (GPay / PhonePe / Paytm), Credit/Debit Cards, NetBanking, Wallets
                           </div>
-                          <div className="text-[10px] text-emerald-700 font-mono font-medium mt-0.5 flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>
-                            <span>Live Key: {LIVE_RAZORPAY_KEY}</span>
+                          <div className="text-[10px] text-emerald-700 font-medium mt-0.5 flex items-center gap-1">
+                            <Lock className="w-3 h-3 text-emerald-600 shrink-0" />
+                            <span>Encrypted 256-bit SSL Gateway Connected</span>
                           </div>
                         </div>
                       </div>

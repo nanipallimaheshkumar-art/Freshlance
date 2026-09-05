@@ -13,6 +13,7 @@ interface HeaderProps {
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   onOpenContact?: () => void;
+  onNavigateToPortal?: (path: '/admin' | '/delivery') => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -25,12 +26,13 @@ export const Header: React.FC<HeaderProps> = ({
   searchQuery,
   setSearchQuery,
   onOpenContact,
+  onNavigateToPortal,
 }) => {
   const { isFreeDeliveryActive, formattedTime } = useFreeDeliveryPromotion();
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200">
-      {/* Top express banner */}
+      {/* Top express banner with quick portal entry */}
       <div className={`${isFreeDeliveryActive ? 'bg-gradient-to-r from-emerald-900 via-slate-900 to-emerald-950 text-emerald-100' : 'bg-slate-900 text-slate-300'} text-xs font-medium py-1.5 px-4 transition-colors`}>
         <div className="max-w-6xl mx-auto flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
@@ -53,9 +55,29 @@ export const Header: React.FC<HeaderProps> = ({
               </>
             )}
           </div>
-          <div className="hidden sm:flex items-center gap-4 text-slate-300 text-[11px]">
-            <span className="text-emerald-400 font-medium">📍 Tadepalligudem (534102 · 15km Zone)</span>
-            <span>✓ Razorpay Live</span>
+          <div className="flex items-center gap-3 text-slate-300 text-[11px]">
+            <span className="hidden sm:inline text-emerald-400 font-medium">📍 Tadepalligudem (534102)</span>
+            {onNavigateToPortal && (
+              <div className="flex items-center gap-2 pl-2 sm:border-l border-slate-700">
+                <button
+                  onClick={() => onNavigateToPortal('/delivery')}
+                  className="text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-semibold transition-colors cursor-pointer"
+                  title="Delivery Partner Login"
+                >
+                  <Bike className="w-3 h-3" />
+                  <span>Driver Login</span>
+                </button>
+                <span className="text-slate-600">·</span>
+                <button
+                  onClick={() => onNavigateToPortal('/admin')}
+                  className="text-amber-400 hover:text-amber-300 flex items-center gap-1 font-semibold transition-colors cursor-pointer"
+                  title="Store Admin Login"
+                >
+                  <Lock className="w-3 h-3" />
+                  <span>Admin Login</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
