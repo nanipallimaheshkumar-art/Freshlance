@@ -1,6 +1,8 @@
 import { UserAccount } from '../types';
+import { generateSessionToken, normalizeRole, AppRole } from './rbac';
 
 const SESSION_KEY = 'freshlane_session';
+const SESSION_TOKEN_KEY = 'freshlane_session_token';
 const REGISTERED_USERS_KEY = 'freshlane_registered_users';
 
 // Authorized Admin Account
@@ -15,7 +17,7 @@ const DEFAULT_USERS: (UserAccount & { password?: string })[] = [
     name: 'Mahesh Kumar',
     email: 'nanipallimaheshkumar@gmail.com',
     phone: '+91 99001 12233',
-    role: 'owner',
+    role: 'admin',
     address: 'FreshLane Operations Hub #1, Subba Rao Peta',
     city: 'Tadepalligudem',
     state: 'Andhra Pradesh',
@@ -27,11 +29,29 @@ const DEFAULT_USERS: (UserAccount & { password?: string })[] = [
     password: '132908',
   },
   {
+    id: 'DRV-101',
+    name: 'Arjun S.',
+    email: 'arjun@freshlane.com',
+    phone: '+91 98450 12345',
+    role: 'delivery_partner',
+    vehicleNumber: 'AP-39-EQ-4421',
+    vehicleType: 'electric_scooter',
+    zone: 'KN Road Hub',
+    address: 'KN Road, Tadepalligudem Hub',
+    city: 'Tadepalligudem',
+    state: 'Andhra Pradesh',
+    country: 'India',
+    pincode: '534102',
+    registeredAt: '2026-08-01T08:00:00.000Z',
+    isVerified: true,
+    password: 'driver123',
+  },
+  {
     id: 'user-demo-1',
     name: 'Riya Sharma',
     email: 'riya@example.com',
     phone: '+91 98765 43210',
-    role: 'shopper',
+    role: 'customer',
     address: '42 Sri Rama Colony, KN Road',
     city: 'Tadepalligudem',
     state: 'Andhra Pradesh',
@@ -135,13 +155,20 @@ export function getRegisteredUsers(): (UserAccount & { password?: string })[] {
     );
 
     if (adminIdx >= 0) {
-      if (cleaned[adminIdx].password !== ADMIN_CREDENTIALS.securityCode || cleaned[adminIdx].role !== 'owner') {
+      if (cleaned[adminIdx].password !== ADMIN_CREDENTIALS.securityCode || cleaned[adminIdx].role !== 'admin') {
         cleaned[adminIdx].password = ADMIN_CREDENTIALS.securityCode;
-        cleaned[adminIdx].role = 'owner';
+        cleaned[adminIdx].role = 'admin';
         changed = true;
       }
     } else {
       cleaned.unshift(DEFAULT_USERS[0]);
+      changed = true;
+    }
+
+    // Ensure driver account exists
+    const driverIdx = cleaned.findIndex((u) => u.email?.toLowerCase().trim() === 'arjun@freshlane.com');
+    if (driverIdx < 0) {
+      cleaned.push(DEFAULT_USERS[1]);
       changed = true;
     }
 
@@ -167,19 +194,41 @@ export function getCurrentSession(): UserAccount | null {
   try {
     const active = sessionStorage.getItem(SESSION_KEY) || localStorage.getItem(SESSION_KEY);
     if (!active) return null;
-    return JSON.parse(active);
+    const user: UserAccount = JSON.parse(active);
+    user.role = normalizeRole(user.role);
+    if (!user.token) {
+      user.token = generateSessionToken(user);
+    }
+    return user;
   } catch {
     return null;
   }
 }
 
+export function getSessionToken(): string {
+  try {
+    const session = getCurrentSession();
+    if (session?.token) return session.token;
+    return localStorage.getItem(SESSION_TOKEN_KEY) || sessionStorage.getItem(SESSION_TOKEN_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
 export function setCurrentSession(user: UserAccount, remember = true) {
   try {
+    user.role = normalizeRole(user.role);
+    if (!user.token) {
+      user.token = generateSessionToken(user);
+    }
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(user));
+    sessionStorage.setItem(SESSION_TOKEN_KEY, user.token);
     if (remember) {
       localStorage.setItem(SESSION_KEY, JSON.stringify(user));
+      localStorage.setItem(SESSION_TOKEN_KEY, user.token);
     } else {
       localStorage.removeItem(SESSION_KEY);
+      localStorage.removeItem(SESSION_TOKEN_KEY);
     }
     window.dispatchEvent(new CustomEvent('freshlane-auth-change', { detail: user }));
   } catch (e) {
@@ -190,11 +239,35 @@ export function setCurrentSession(user: UserAccount, remember = true) {
 export function clearCurrentSession() {
   try {
     sessionStorage.removeItem(SESSION_KEY);
+    sessionStorage.removeItem(SESSION_TOKEN_KEY);
     localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(SESSION_TOKEN_KEY);
     window.dispatchEvent(new CustomEvent('freshlane-auth-change', { detail: null }));
   } catch (e) {
     console.error('Failed to clear session', e);
   }
+}
+
+/**
+ * Quick switch active user role for RBAC testing & demonstrations
+ */
+export function switchSessionRole(targetRole: AppRole): UserAccount {
+  const users = getRegisteredUsers();
+  let selectedUser: (UserAccount & { password?: string }) | undefined;
+
+  if (targetRole === 'admin') {
+    selectedUser = users.find((u) => normalizeRole(u.role) === 'admin') || DEFAULT_USERS[0];
+  } else if (targetRole === 'delivery_partner') {
+    selectedUser = users.find((u) => normalizeRole(u.role) === 'delivery_partner') || DEFAULT_USERS[1];
+  } else {
+    selectedUser = users.find((u) => normalizeRole(u.role) === 'customer') || DEFAULT_USERS[2];
+  }
+
+  const { password: _, ...safeUser } = selectedUser;
+  safeUser.role = targetRole;
+  safeUser.token = generateSessionToken(safeUser);
+  setCurrentSession(safeUser, true);
+  return safeUser;
 }
 
 export function registerAccount(params: {
@@ -308,14 +381,14 @@ export function authenticateUser(
 export function authenticateStaff(
   identifier: string,
   passcode: string,
-  preferredRole: 'owner' | 'driver' = 'owner'
+  preferredRole: 'admin' | 'delivery_partner' | 'owner' | 'driver' = 'admin'
 ): { success: boolean; error?: string; user?: UserAccount } {
   const users = getRegisteredUsers();
   const cleanId = identifier.trim().toLowerCase();
   const cleanPass = passcode.trim();
 
   // 1. STORE ADMIN LOGIN
-  if (preferredRole === 'owner') {
+  if (preferredRole === 'admin' || preferredRole === 'owner') {
     if (cleanId !== ADMIN_CREDENTIALS.email.toLowerCase()) {
       return {
         success: false,
@@ -331,33 +404,37 @@ export function authenticateStaff(
     }
 
     const admin = users.find(
-      (u) => u.role === 'owner' && u.email.toLowerCase() === ADMIN_CREDENTIALS.email.toLowerCase()
+      (u) => normalizeRole(u.role) === 'admin' && u.email.toLowerCase() === ADMIN_CREDENTIALS.email.toLowerCase()
     );
 
     if (admin) {
       const { password: _, ...safeUser } = admin;
+      safeUser.role = 'admin';
+      safeUser.token = generateSessionToken(safeUser);
       return { success: true, user: safeUser };
     }
 
+    const newAdmin: UserAccount = {
+      id: 'admin-mahesh',
+      name: 'Store Administrator',
+      email: ADMIN_CREDENTIALS.email,
+      role: 'admin',
+      city: 'Tadepalligudem',
+      country: 'India',
+      pincode: '534102',
+      registeredAt: new Date().toISOString(),
+      isVerified: true,
+    };
+    newAdmin.token = generateSessionToken(newAdmin);
     return {
       success: true,
-      user: {
-        id: 'admin-mahesh',
-        name: 'Store Administrator',
-        email: ADMIN_CREDENTIALS.email,
-        role: 'owner',
-        city: 'Tadepalligudem',
-        country: 'India',
-        pincode: '534102',
-        registeredAt: new Date().toISOString(),
-        isVerified: true,
-      },
+      user: newAdmin,
     };
   }
 
-  // 2. DELIVERY DRIVER LOGIN (Only drivers added by Admin in Admin Portal)
-  if (preferredRole === 'driver') {
-    const drivers = users.filter((u) => u.role === 'driver');
+  // 2. DELIVERY PARTNER LOGIN
+  if (preferredRole === 'delivery_partner' || preferredRole === 'driver') {
+    const drivers = users.filter((u) => normalizeRole(u.role) === 'delivery_partner');
 
     if (drivers.length === 0) {
       return {
@@ -389,6 +466,8 @@ export function authenticateStaff(
     }
 
     const { password: _, ...safeDriver } = matchedDriver;
+    safeDriver.role = 'delivery_partner';
+    safeDriver.token = generateSessionToken(safeDriver);
     return { success: true, user: safeDriver };
   }
 
@@ -397,7 +476,8 @@ export function authenticateStaff(
 
 export function isStaffUser(user: UserAccount | null): boolean {
   if (!user) return false;
-  return user.role === 'owner' || user.role === 'driver';
+  const r = normalizeRole(user.role);
+  return r === 'admin' || r === 'delivery_partner';
 }
 
 // ---------------------------------------------------------------------------

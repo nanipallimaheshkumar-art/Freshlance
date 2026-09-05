@@ -45,12 +45,15 @@ export interface CartItem {
   weightKg?: number;
 }
 
+export type UserRole = 'admin' | 'delivery_partner' | 'customer' | 'owner' | 'driver' | 'shopper';
+
 export interface UserAccount {
   id: string;
   name: string;
   email: string;
   phone?: string;
-  role: 'shopper' | 'owner' | 'driver';
+  role: UserRole;
+  token?: string;
   address?: string;
   city?: string;
   state?: string;

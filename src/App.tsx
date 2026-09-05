@@ -9,12 +9,36 @@ import { CheckoutModal } from './components/CheckoutModal';
 import { ProductDetailModal } from './components/ProductDetailModal';
 import { LiveTrackingView } from './components/LiveTrackingView';
 import { OperationsPortal } from './components/OperationsPortal';
+import { DeliveryPortal } from './components/DeliveryPortal';
+import { PortalLoginPage } from './components/PortalLoginPage';
+import { ContactModal } from './components/ContactModal';
 import { UserAccount, CartItem, ProduceItem } from './types';
 import { getCurrentSession, clearCurrentSession } from './utils/authStore';
+import { evaluateRouteGuard, parseCurrentRoute, normalizeRole, AppRole } from './utils/rbac';
 
 export default function App() {
-  const [activeWeb, setActiveWeb] = useState<'customer' | 'operations'>('customer');
-  const [opsSubApp, setOpsSubApp] = useState<'admin' | 'driver'>('admin');
+  const [user, setUser] = useState<UserAccount | null>(() => getCurrentSession());
+  const [activeWeb, setActiveWeb] = useState<'customer' | 'admin' | 'delivery'>(() => {
+    if (typeof window !== 'undefined') {
+      const path = window.location.pathname.toLowerCase();
+      const hash = window.location.hash.toLowerCase();
+      const initialRoute = parseCurrentRoute(path, hash);
+      const initialUser = getCurrentSession();
+      const initialRole = normalizeRole(initialUser?.role);
+      const guard = evaluateRouteGuard(initialRole, initialRoute);
+
+      if (!guard.allowed) {
+        if (guard.redirectTo === '/delivery') return 'delivery';
+        return 'customer';
+      }
+
+      if (initialRoute === 'delivery') return 'delivery';
+      if (initialRoute === 'admin') return 'admin';
+    }
+    return 'customer';
+  });
+
+  const [portalLoginError, setPortalLoginError] = useState<string | null>(null);
   const [currentTab, setCurrentTab] = useState<'shop' | 'orders' | 'tracking' | 'login' | 'register'>('shop');
   const [activeTrackingOrderId, setActiveTrackingOrderId] = useState<string>('FL-91428');
   const [cartItems, setCartItems] = useState<CartItem[]>(() => {
@@ -27,10 +51,110 @@ export default function App() {
   });
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [isContactOpen, setIsContactOpen] = useState(false);
   const [inspectingProduct, setInspectingProduct] = useState<ProduceItem | null>(null);
-  const [user, setUser] = useState<UserAccount | null>(getCurrentSession());
   const [searchQuery, setSearchQuery] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (message: string) => {
+    setToastMessage(message);
+    setTimeout(() => {
+      setToastMessage((prev) => (prev === message ? null : prev));
+    }, 3500);
+  };
+
+  // Centralized route navigation handler with strict RBAC Route Guard enforcement
+  const navigateToRoute = (targetPath: string) => {
+    setPortalLoginError(null);
+    const role = normalizeRole(user?.role);
+    const targetRoute = parseCurrentRoute(targetPath, '');
+
+    // 1. Delivery Route
+    if (targetRoute === 'delivery') {
+      if (!user) {
+        // Unauthenticated -> Show dedicated Delivery Partner Login
+        setActiveWeb('delivery');
+        try {
+          window.history.pushState({}, '', '/delivery');
+        } catch {}
+        return;
+      }
+      if (role === 'delivery_partner' || role === 'admin') {
+        setActiveWeb('delivery');
+        try {
+          window.history.pushState({}, '', '/delivery');
+        } catch {}
+        return;
+      }
+      // Logged in as customer -> Access Denied
+      showToast('Access Denied: You do not have permission to access this portal.');
+      setPortalLoginError('Access Denied: You do not have permission to access this portal.');
+      setActiveWeb('delivery');
+      return;
+    }
+
+    // 2. Admin Route
+    if (targetRoute === 'admin') {
+      if (!user) {
+        // Unauthenticated -> Show dedicated Admin Portal Login
+        setActiveWeb('admin');
+        try {
+          window.history.pushState({}, '', '/admin');
+        } catch {}
+        return;
+      }
+      if (role === 'admin') {
+        setActiveWeb('admin');
+        try {
+          window.history.pushState({}, '', '/admin');
+        } catch {}
+        return;
+      }
+      // Logged in as customer or delivery_partner -> Access Denied
+      showToast('Access Denied: You do not have permission to access this portal.');
+      setPortalLoginError('Access Denied: You do not have permission to access this portal.');
+      setActiveWeb('admin');
+      return;
+    }
+
+    // 3. Customer Routes
+    const guard = evaluateRouteGuard(role, targetRoute);
+    if (!guard.allowed) {
+      if (guard.notificationMessage) {
+        showToast(guard.notificationMessage);
+      }
+      if (guard.redirectTo === '/delivery') {
+        setActiveWeb('delivery');
+        try {
+          window.history.pushState({}, '', '/delivery');
+        } catch {}
+      } else {
+        setActiveWeb('customer');
+        setCurrentTab('shop');
+        try {
+          window.history.pushState({}, '', '/');
+        } catch {}
+      }
+      return;
+    }
+
+    if (targetRoute === 'login') {
+      setActiveWeb('customer');
+      setCurrentTab('login');
+      try {
+        window.history.pushState({}, '', '/login');
+      } catch {}
+    } else if (targetRoute === 'checkout') {
+      setActiveWeb('customer');
+      setIsCheckoutOpen(true);
+    } else {
+      setActiveWeb('customer');
+      setCurrentTab('shop');
+      try {
+        window.history.pushState({}, '', '/');
+      } catch {}
+    }
+  };
 
   // Sync cart to localStorage
   useEffect(() => {
@@ -41,22 +165,87 @@ export default function App() {
     }
   }, [cartItems]);
 
-  // Support switching between Customer Web and Operations Web via hash or toggle
+  // Support switching routes via browser back/forward or hash
   useEffect(() => {
-    const handleHash = () => {
+    const handleNavigation = () => {
+      const path = window.location.pathname.toLowerCase();
       const hash = window.location.hash.toLowerCase();
-      if (hash === '#operations' || hash === '#ops' || hash === '#admin') {
-        setActiveWeb('operations');
-        setOpsSubApp('admin');
-      } else if (hash === '#driver' || hash === '#fleet') {
-        setActiveWeb('operations');
-        setOpsSubApp('driver');
+      const targetRoute = parseCurrentRoute(path, hash);
+      const role = normalizeRole(user?.role);
+
+      if (targetRoute === 'delivery') {
+        if (!user || role === 'delivery_partner' || role === 'admin') {
+          setActiveWeb('delivery');
+        } else {
+          showToast('Access Denied: You do not have permission to access this portal.');
+          setPortalLoginError('Access Denied: You do not have permission to access this portal.');
+          setActiveWeb('delivery');
+        }
+        return;
+      }
+
+      if (targetRoute === 'admin') {
+        if (!user || role === 'admin') {
+          setActiveWeb('admin');
+        } else {
+          showToast('Access Denied: You do not have permission to access this portal.');
+          setPortalLoginError('Access Denied: You do not have permission to access this portal.');
+          setActiveWeb('admin');
+        }
+        return;
+      }
+
+      // Customer route guard
+      const guard = evaluateRouteGuard(role, targetRoute);
+      if (!guard.allowed) {
+        if (guard.notificationMessage) {
+          showToast(guard.notificationMessage);
+        }
+        if (guard.redirectTo === '/delivery') {
+          setActiveWeb('delivery');
+          try {
+            window.history.replaceState({}, '', '/delivery');
+          } catch {}
+        } else {
+          setActiveWeb('customer');
+          setCurrentTab('shop');
+          try {
+            window.history.replaceState({}, '', '/');
+          } catch {}
+        }
+        return;
+      }
+
+      setActiveWeb('customer');
+      if (targetRoute === 'login') {
+        setCurrentTab('login');
+      } else if (targetRoute === 'checkout') {
+        setIsCheckoutOpen(true);
       }
     };
-    handleHash();
-    window.addEventListener('hashchange', handleHash);
-    return () => window.removeEventListener('hashchange', handleHash);
-  }, []);
+
+    handleNavigation();
+    window.addEventListener('hashchange', handleNavigation);
+    window.addEventListener('popstate', handleNavigation);
+    return () => {
+      window.removeEventListener('hashchange', handleNavigation);
+      window.removeEventListener('popstate', handleNavigation);
+    };
+  }, [user]);
+
+  // Enforce delivery partner confinement: Delivery partners can ONLY access the /delivery portal
+  useEffect(() => {
+    const role = normalizeRole(user?.role);
+    if (role === 'delivery_partner') {
+      if (activeWeb !== 'delivery') {
+        setActiveWeb('delivery');
+        showToast('Delivery partners can ONLY access the /delivery portal.');
+        try {
+          window.history.replaceState({}, '', '/delivery');
+        } catch {}
+      }
+    }
+  }, [user, activeWeb]);
 
   // Auth event listener
   useEffect(() => {
@@ -66,13 +255,6 @@ export default function App() {
     window.addEventListener('freshlane-auth-change', handleAuthChange);
     return () => window.removeEventListener('freshlane-auth-change', handleAuthChange);
   }, []);
-
-  const showToast = (message: string) => {
-    setToastMessage(message);
-    setTimeout(() => {
-      setToastMessage((prev) => (prev === message ? null : prev));
-    }, 2800);
-  };
 
   const handleAddToCart = (
     item: { id: string; name: string; price: number; unit: string; image: string },
@@ -122,46 +304,132 @@ export default function App() {
   const handleLogout = () => {
     clearCurrentSession();
     setUser(null);
+    setPortalLoginError(null);
     showToast('Signed out of FreshLane.');
+    setActiveWeb('customer');
+    setCurrentTab('shop');
+    try {
+      window.history.pushState({}, '', '/');
+    } catch {}
+  };
+
+  const handleCustomerLoginSuccess = (signedInUser: UserAccount) => {
+    setUser(signedInUser);
+    showToast(`Welcome back, ${signedInUser.name.split(' ')[0]}!`);
     setCurrentTab('shop');
   };
 
-  const handleLoginSuccess = (signedInUser: UserAccount) => {
+  const handlePortalLoginSuccess = (signedInUser: UserAccount) => {
     setUser(signedInUser);
-    showToast(`Welcome back, ${signedInUser.name.split(' ')[0]}!`);
-    if (signedInUser.role === 'owner') {
-      setCurrentTab('admin');
-    } else {
-      setCurrentTab('shop');
-    }
+    setPortalLoginError(null);
+    showToast(`Access Granted: Welcome ${signedInUser.name} (${signedInUser.role})`);
   };
 
   const handleRegisterSuccess = (newUser: UserAccount) => {
     setUser(newUser);
     showToast(`Account created! Welcome to FreshLane, ${newUser.name.split(' ')[0]}!`);
-    if (newUser.role === 'owner') {
-      setCurrentTab('admin');
-    } else {
-      setCurrentTab('shop');
-    }
+    setCurrentTab('shop');
   };
 
   const totalCartCount = cartItems.reduce((sum, item) => sum + item.qty, 0);
 
-  // Separate Admin and Driver Operations Web App
-  if (activeWeb === 'operations') {
+  // ---------------------------------------------------------------------------
+  // 1. DELIVERY PORTAL ROUTING (/delivery)
+  // ---------------------------------------------------------------------------
+  if (activeWeb === 'delivery') {
+    const role = normalizeRole(user?.role);
+    const isAuthorized = role === 'delivery_partner' || role === 'admin';
+
+    // Real Login Protection: require authentication & database role check
+    if (!user || !isAuthorized) {
+      return (
+        <>
+          {toastMessage && (
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-xs font-semibold px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 border border-slate-700/50 animate-fade-in">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+              <span>{toastMessage}</span>
+            </div>
+          )}
+          <PortalLoginPage
+            portalType="delivery"
+            initialError={portalLoginError}
+            onLoginSuccess={handlePortalLoginSuccess}
+            onBackToShop={() => navigateToRoute('/')}
+          />
+        </>
+      );
+    }
+
+    // Authenticated delivery partner or admin
     return (
-      <OperationsPortal
-        user={user}
-        defaultSubApp={opsSubApp}
-        onSwitchToCustomerWeb={() => {
-          window.location.hash = '';
-          setActiveWeb('customer');
-        }}
-      />
+      <div className="min-h-screen bg-slate-950 flex flex-col font-sans">
+        {toastMessage && (
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-xs font-semibold px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 border border-slate-700/50 animate-fade-in">
+            <span className="w-2 h-2 rounded-full bg-sky-400 animate-ping" />
+            <span>{toastMessage}</span>
+          </div>
+        )}
+        <DeliveryPortal
+          onBackToShop={() => {
+            if (role === 'delivery_partner') {
+              showToast('Delivery partners can ONLY access the /delivery portal.');
+              return;
+            }
+            navigateToRoute('/');
+          }}
+        />
+      </div>
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // 2. ADMIN DASHBOARD ROUTING (/admin)
+  // ---------------------------------------------------------------------------
+  if (activeWeb === 'admin') {
+    const role = normalizeRole(user?.role);
+    const isAuthorized = role === 'admin';
+
+    // Real Login Protection: require authentication & database role check
+    if (!user || !isAuthorized) {
+      return (
+        <>
+          {toastMessage && (
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-xs font-semibold px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 border border-slate-700/50 animate-fade-in">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+              <span>{toastMessage}</span>
+            </div>
+          )}
+          <PortalLoginPage
+            portalType="admin"
+            initialError={portalLoginError}
+            onLoginSuccess={handlePortalLoginSuccess}
+            onBackToShop={() => navigateToRoute('/')}
+          />
+        </>
+      );
+    }
+
+    // Authenticated Admin (Master Key)
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col font-sans">
+        {toastMessage && (
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-xs font-semibold px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 border border-slate-700/50 animate-fade-in">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+            <span>{toastMessage}</span>
+          </div>
+        )}
+        <OperationsPortal
+          user={user}
+          defaultSubApp="admin"
+          onSwitchToCustomerWeb={() => navigateToRoute('/')}
+        />
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // 3. CUSTOMER STOREFRONT ROUTING (/)
+  // ---------------------------------------------------------------------------
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col font-sans selection:bg-emerald-500 selection:text-white">
       {/* Toast Notification */}
@@ -172,7 +440,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Main Customer Header */}
+      {/* Main Customer Header: Clean, Customer-Focused Navigation */}
       <Header
         currentTab={currentTab}
         setCurrentTab={setCurrentTab}
@@ -182,14 +450,10 @@ export default function App() {
         onLogout={handleLogout}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
-        onOpenOperationsPortal={() => {
-          window.location.hash = '#operations';
-          setOpsSubApp('admin');
-          setActiveWeb('operations');
-        }}
+        onOpenContact={() => setIsContactOpen(true)}
       />
 
-      {/* Customer View router */}
+      {/* Customer View Router */}
       <main className="flex-1">
         {currentTab === 'shop' && (
           <Storefront
@@ -226,14 +490,10 @@ export default function App() {
 
         {currentTab === 'login' && (
           <LoginPage
-            onLoginSuccess={handleLoginSuccess}
+            onLoginSuccess={handleCustomerLoginSuccess}
             onGoToRegister={() => setCurrentTab('register')}
             onGoToShop={() => setCurrentTab('shop')}
-            onOpenOperationsPortal={() => {
-              window.location.hash = '#operations';
-              setOpsSubApp('admin');
-              setActiveWeb('operations');
-            }}
+            onOpenOperationsPortal={() => navigateToRoute('/admin')}
           />
         )}
 
@@ -254,39 +514,52 @@ export default function App() {
               <span className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-sm font-black shadow-xs">
                 ✦
               </span>
-              <span>freshlane</span>
+              <span>freshlane market</span>
             </div>
-            <p className="text-slate-400 leading-relaxed">
-              30-minute express local market for hand-picked fruits, leafy greens in fresh bundles, and curated farm produce.
+            <p className="text-slate-400 text-xs leading-relaxed">
+              Tadepalligudem's premier instant fresh produce service. Harvested at dawn from local Andhra farms, quality checked, and delivered to your doorstep in 24–30 minutes.
             </p>
-            <div className="flex items-center gap-2 pt-1 text-[11px] text-emerald-400 font-medium">
-              <span>✓ Daily Market Rates</span>
-              <span>•</span>
-              <span>✓ Razorpay Checkout</span>
-            </div>
           </div>
 
           <div className="space-y-2">
-            <h4 className="font-bold text-[11px] uppercase tracking-wider text-emerald-400">Produce Market</h4>
+            <h4 className="font-bold text-[11px] uppercase tracking-wider text-emerald-400">Quick Links</h4>
             <ul className="space-y-1.5 text-slate-400">
               <li>
-                <button onClick={() => setCurrentTab('shop')} className="hover:text-white cursor-pointer transition-colors">
-                  Sweet Fruits &amp; Pomegranates
+                <button
+                  onClick={() => {
+                    setCurrentTab('shop');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className="hover:text-white cursor-pointer transition-colors"
+                >
+                  Fresh Veggies &amp; Fruits
                 </button>
               </li>
               <li>
-                <button onClick={() => setCurrentTab('shop')} className="hover:text-white cursor-pointer transition-colors">
-                  Leafy Greens (Fresh Bundles)
+                <button
+                  onClick={() => {
+                    setCurrentTab('shop');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className="hover:text-white cursor-pointer transition-colors"
+                >
+                  Combo Fresh Boxes
                 </button>
               </li>
               <li>
-                <button onClick={() => setCurrentTab('shop')} className="hover:text-white cursor-pointer transition-colors">
-                  Exotic Dragon Fruit
-                </button>
-              </li>
-              <li>
-                <button onClick={() => setCurrentTab('orders')} className="hover:text-emerald-400 cursor-pointer text-emerald-400 transition-colors">
+                <button
+                  onClick={() => setCurrentTab('orders')}
+                  className="hover:text-white cursor-pointer transition-colors"
+                >
                   Track Past Orders
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => setIsContactOpen(true)}
+                  className="hover:text-white cursor-pointer transition-colors"
+                >
+                  Contact Helpdesk
                 </button>
               </li>
             </ul>
@@ -310,18 +583,6 @@ export default function App() {
                   Order History &amp; Receipts
                 </button>
               </li>
-              <li className="pt-1.5 border-t border-slate-800">
-                <button
-                  onClick={() => {
-                    window.location.hash = '#operations';
-                    setOpsSubApp('admin');
-                    setActiveWeb('operations');
-                  }}
-                  className="text-slate-400 hover:text-emerald-400 font-medium cursor-pointer transition-colors flex items-center gap-1.5 text-[11px]"
-                >
-                  <span>🔒 Staff Operations Portal (Restricted) ↗</span>
-                </button>
-              </li>
             </ul>
           </div>
 
@@ -336,12 +597,36 @@ export default function App() {
           </div>
         </div>
 
+        {/* Bottom Footer Bar with Subtle Clean Portal Links */}
         <div className="max-w-6xl mx-auto pt-6 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-400 gap-3">
           <div>© 2026 FreshLane Produce Market. All rights reserved.</div>
-          <div className="flex items-center gap-4">
-            <span className="hover:text-slate-300">Fresh Produce Guarantee</span>
-            <span className="hover:text-slate-300">Privacy Policy</span>
-            <span className="hover:text-slate-300">Terms of Service</span>
+
+          {/* Subtle clean portal links in footer */}
+          <div className="flex items-center gap-3 text-slate-500 font-medium text-[11px]">
+            <button
+              onClick={() => navigateToRoute('/delivery')}
+              className="hover:text-emerald-400 transition-colors cursor-pointer"
+            >
+              Delivery Partner Login
+            </button>
+            <span className="text-slate-700">·</span>
+            <button
+              onClick={() => navigateToRoute('/admin')}
+              className="hover:text-amber-400 transition-colors cursor-pointer"
+            >
+              Admin Access
+            </button>
+          </div>
+
+          <div className="flex items-center gap-4 text-slate-400 text-[11px]">
+            <button
+              onClick={() => setIsContactOpen(true)}
+              className="hover:text-slate-200 transition-colors cursor-pointer"
+            >
+              Contact Support
+            </button>
+            <span className="hover:text-slate-300">Fresh Guarantee</span>
+            <span className="hover:text-slate-300">Privacy</span>
           </div>
         </div>
       </footer>
@@ -374,19 +659,20 @@ export default function App() {
           setActiveTrackingOrderId(id);
           setCurrentTab('tracking');
         }}
-        onOrderPlaced={(order) => {
-          setCartItems([]);
-          if (order && order.id) {
-            setActiveTrackingOrderId(order.id);
-          }
-        }}
+        onClearCart={() => setCartItems([])}
       />
 
       {/* Product Detail Modal */}
       <ProductDetailModal
-        item={inspectingProduct}
+        product={inspectingProduct}
         onClose={() => setInspectingProduct(null)}
-        onAddToCart={(item, qty) => handleAddToCart(item, qty)}
+        onAddToCart={handleAddToCart}
+      />
+
+      {/* Customer Contact Support Modal */}
+      <ContactModal
+        isOpen={isContactOpen}
+        onClose={() => setIsContactOpen(false)}
       />
     </div>
   );

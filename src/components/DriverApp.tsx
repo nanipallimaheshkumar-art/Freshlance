@@ -479,12 +479,23 @@ export const DriverApp: React.FC<DriverAppProps> = ({ user, onGoToShop }) => {
       </div>
 
       {/* GPS Interval Banner */}
-      <div className="mt-3 flex items-center justify-between px-3 py-1.5 bg-slate-100 rounded-xl text-[11px] text-slate-600 font-medium">
-        <span className="flex items-center gap-1.5">
+      <div className="mt-3 flex items-center justify-between flex-wrap gap-2 px-3 py-1.5 bg-slate-100 rounded-xl text-[11px] text-slate-600 font-medium">
+        <div className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
           <span className="font-bold text-slate-800">Battery-Efficient GPS (4s)</span>
-        </span>
-        <span className="font-mono text-slate-500 text-[10px]">{lastPingStatus}</span>
+          <span className="font-mono text-slate-500 text-[10px] hidden sm:inline">· {lastPingStatus}</span>
+        </div>
+        <a
+          href="#delivery-portal"
+          onClick={(e) => {
+            e.preventDefault();
+            window.location.hash = '#delivery-portal';
+          }}
+          className="text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300/80 px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+        >
+          <Navigation className="w-3 h-3 text-emerald-600" />
+          <span>Geofence Delivery Portal ↗</span>
+        </a>
       </div>
 
       {/* Incoming Order Simulation Alert Modal / Banner */}
