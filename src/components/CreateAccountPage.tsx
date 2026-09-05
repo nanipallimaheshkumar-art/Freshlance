@@ -54,6 +54,12 @@ export const CreateAccountPage: React.FC<CreateAccountPageProps> = ({
 
   // OTP Verification state
   const [otpCode, setOtpCode] = useState('');
+  const [emailDeliveryInfo, setEmailDeliveryInfo] = useState<{
+    checked: boolean;
+    emailSent: boolean;
+    hasResendKey: boolean;
+    providerMessage?: string;
+  } | null>(null);
   const [resendTimer, setResendTimer] = useState(30);
   const [canResend, setCanResend] = useState(false);
   const [resendSuccessMsg, setResendSuccessMsg] = useState<string | null>(null);
@@ -136,6 +142,7 @@ export const CreateAccountPage: React.FC<CreateAccountPageProps> = ({
     // Generate 6-digit OTP code in background for both email & phone lookup
     const code = generateVerificationCode(email.trim().toLowerCase());
     generateVerificationCode(cleanDigits);
+    setEmailDeliveryInfo(null);
 
     // Dispatch Email OTP via Resend API on server
     fetch('/api/auth/send-email-otp', {
@@ -150,11 +157,25 @@ export const CreateAccountPage: React.FC<CreateAccountPageProps> = ({
     })
       .then((res) => res.json())
       .then((data) => {
+        setEmailDeliveryInfo({
+          checked: true,
+          emailSent: Boolean(data?.emailSent),
+          hasResendKey: Boolean(data?.hasResendKey),
+          providerMessage: data?.providerMessage,
+        });
         if (data?.providerMessage) {
           console.log('[Resend OTP]', data.providerMessage);
         }
       })
-      .catch((err) => console.warn('Email OTP dispatch error:', err));
+      .catch((err) => {
+        console.warn('Email OTP dispatch error:', err);
+        setEmailDeliveryInfo({
+          checked: true,
+          emailSent: false,
+          hasResendKey: false,
+          providerMessage: 'Server email endpoint could not be reached',
+        });
+      });
 
     setOtpCode('');
     setResendTimer(30);
@@ -172,6 +193,7 @@ export const CreateAccountPage: React.FC<CreateAccountPageProps> = ({
 
     const newCode = generateVerificationCode(email.trim().toLowerCase());
     generateVerificationCode(cleanDigits);
+    setEmailDeliveryInfo(null);
 
     fetch('/api/auth/send-email-otp', {
       method: 'POST',
@@ -185,16 +207,30 @@ export const CreateAccountPage: React.FC<CreateAccountPageProps> = ({
     })
       .then((res) => res.json())
       .then((data) => {
+        setEmailDeliveryInfo({
+          checked: true,
+          emailSent: Boolean(data?.emailSent),
+          hasResendKey: Boolean(data?.hasResendKey),
+          providerMessage: data?.providerMessage,
+        });
         if (data?.providerMessage) {
           console.log('[Resend OTP]', data.providerMessage);
         }
       })
-      .catch((err) => console.warn('Email OTP resend error:', err));
+      .catch((err) => {
+        console.warn('Email OTP resend error:', err);
+        setEmailDeliveryInfo({
+          checked: true,
+          emailSent: false,
+          hasResendKey: false,
+          providerMessage: 'Server email endpoint could not be reached',
+        });
+      });
 
     setResendTimer(30);
     setCanResend(false);
     setError(null);
-    setResendSuccessMsg(`A fresh 6-digit verification code has been sent via Resend to ${email.trim().toLowerCase()}`);
+    setResendSuccessMsg(`A fresh 6-digit verification code has been dispatched to ${email.trim().toLowerCase()}`);
     setTimeout(() => setResendSuccessMsg(null), 6000);
   };
 
@@ -484,20 +520,19 @@ export const CreateAccountPage: React.FC<CreateAccountPageProps> = ({
                 </button>
               </div>
 
-              {/* Email Delivery Card (Powered by Resend) */}
+              {/* Email Delivery Card */}
               <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs space-y-2.5 animate-fadeIn">
                 <div className="flex items-center justify-between text-emerald-950 font-bold">
                   <span className="flex items-center gap-2">
                     <Mail className="w-4 h-4 text-emerald-700 shrink-0" />
-                    <span>Email Verification Code Sent</span>
+                    <span>Verification Code Sent</span>
                   </span>
-                  <span className="text-[10px] bg-emerald-100 border border-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
-                    <Sparkles className="w-2.5 h-2.5 text-emerald-600" />
-                    <span>Resend Email OTP</span>
+                  <span className="text-[10px] bg-emerald-100 border border-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full font-bold">
+                    Check Inbox
                   </span>
                 </div>
                 <p className="text-slate-700 text-xs leading-relaxed">
-                  We have dispatched your 6-digit security code directly via Resend to your registered email address:
+                  We have dispatched your 6-digit security code directly to your registered email address:
                 </p>
                 <div className="flex items-center justify-between px-3 py-2 bg-white border border-emerald-200/80 rounded-xl">
                   <div className="flex items-center gap-2 min-w-0">
@@ -509,12 +544,12 @@ export const CreateAccountPage: React.FC<CreateAccountPageProps> = ({
                     </span>
                   </div>
                   <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/60 shrink-0 ml-2">
-                    Sent via Resend
+                    Sent
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-500 flex items-start gap-1.5 pt-0.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                  <span>Please check your email inbox (including Spam, Junk, or Promotions tabs) and enter the 6 digits below to activate your account. Valid for 10 minutes.</span>
+                  <span>Please check your inbox (including Spam, Junk, or Promotions folders) and enter the 6 digits below. Valid for 10 minutes.</span>
                 </p>
               </div>
 

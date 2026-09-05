@@ -22,6 +22,8 @@ import { saveUserOrder } from '../utils/orderStore';
 import { checkDeliveryEligibility, DeliveryEligibilityResult, TADEPALLIGUDEM_ZONE_AREAS } from '../utils/deliveryZone';
 import { useFreeDeliveryPromotion } from '../utils/freeDeliveryPromo';
 
+const LIVE_RAZORPAY_KEY = import.meta.env.VITE_RAZORPAY_KEY_ID || '';
+
 interface CheckoutModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -63,11 +65,15 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [razorpayOrderId, setRazorpayOrderId] = useState<string>('');
   const [customKeyOpen, setCustomKeyOpen] = useState(false);
   const [razorpayKeyId, setRazorpayKeyId] = useState<string>(() => {
-    return (
-      localStorage.getItem('freshlane_razorpay_key') ||
-      (import.meta as any).env?.VITE_RAZORPAY_KEY_ID ||
-      'rzp_live_TYCJiSOV0TpCse'
-    );
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('freshlane_razorpay_key');
+      if (stored && stored.startsWith('rzp_test_')) {
+        localStorage.removeItem('freshlane_razorpay_key');
+      } else if (stored && stored.startsWith('rzp_live_')) {
+        return stored;
+      }
+    }
+    return LIVE_RAZORPAY_KEY;
   });
   const [cloudflareWorkerUrl, setCloudflareWorkerUrl] = useState<string>(() => {
     return localStorage.getItem('freshlane_cloudflare_url') || '';
@@ -294,8 +300,13 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         throw new Error('Razorpay order ID was not received from the server.');
       }
 
-      // Step 2: Open Standard Razorpay Checkout Modal (using live server key)
-      const activeKey = serverKeyId || razorpayKeyId || (import.meta as any).env?.VITE_RAZORPAY_KEY_ID || 'rzp_live_TYCJiSOV0TpCse';
+      // Step 2: Open Standard Razorpay Checkout Modal (strictly LIVE key)
+      const activeKey =
+        (serverKeyId && typeof serverKeyId === 'string' && serverKeyId.startsWith('rzp_live_') ? serverKeyId : null) ||
+        (razorpayKeyId && typeof razorpayKeyId === 'string' && razorpayKeyId.startsWith('rzp_live_') ? razorpayKeyId : null) ||
+        LIVE_RAZORPAY_KEY;
+
+      console.log('[FreshLane Razorpay Live Mode] Using live key:', activeKey, 'Order ID:', order_id);
 
       const options = {
         key: activeKey,
@@ -672,11 +683,15 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                           <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                             <span>Razorpay Secure Gateway</span>
                             <span className="text-[9px] font-extrabold uppercase tracking-wider bg-emerald-600 text-white px-1.5 py-0.2 rounded">
-                              Recommended
+                              LIVE MODE
                             </span>
                           </div>
                           <div className="text-[11px] text-slate-500">
                             UPI (GPay / PhonePe / Paytm), Credit/Debit Cards, NetBanking, Wallets
+                          </div>
+                          <div className="text-[10px] text-emerald-700 font-mono font-medium mt-0.5 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>
+                            <span>Live Key: {LIVE_RAZORPAY_KEY}</span>
                           </div>
                         </div>
                       </div>

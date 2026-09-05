@@ -110,13 +110,17 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ user, onGoToShop
   const [newItemImage, setNewItemImage] = useState(PRODUCE_PHOTO_PRESETS[0].url);
   const [newItemDescription, setNewItemDescription] = useState('');
 
-  // Razorpay settings state
+  // Razorpay settings state (Strictly Live Key)
   const [razorpayKey, setRazorpayKey] = useState(() => {
-    return (
-      localStorage.getItem('freshlane_razorpay_key') ||
-      (import.meta as any).env?.VITE_RAZORPAY_KEY_ID ||
-      'rzp_live_TYCJiSOV0TpCse'
-    );
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('freshlane_razorpay_key');
+      if (stored && stored.startsWith('rzp_test_')) {
+        localStorage.removeItem('freshlane_razorpay_key');
+      } else if (stored && stored.startsWith('rzp_live_')) {
+        return stored;
+      }
+    }
+    return import.meta.env.VITE_RAZORPAY_KEY_ID || '';
   });
   const [razorpaySaved, setRazorpaySaved] = useState(false);
 

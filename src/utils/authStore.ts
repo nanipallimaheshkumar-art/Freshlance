@@ -97,7 +97,7 @@ export function verifyCode(identifier: string, inputCode: string): { valid: bool
     }
 
     if (found.code !== cleanCode && cleanCode !== '123456') {
-      return { valid: false, error: 'Invalid verification code. Please check your SMS messages and try again.' };
+      return { valid: false, error: 'Invalid verification code. Please check your email and try again.' };
     }
 
     return { valid: true };
