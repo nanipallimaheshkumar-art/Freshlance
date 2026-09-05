@@ -424,7 +424,7 @@ export const DriverApp: React.FC<DriverAppProps> = ({ user, onGoToShop }) => {
         </div>
 
         {/* Diagnostic Toggle Strip (Testing Features: Network, Background, Driver Switch) */}
-        <div className="flex items-center justify-between bg-slate-950/60 p-2 rounded-xl text-[10px] text-slate-400 border border-slate-800/60">
+        <div className="flex items-center justify-between flex-wrap gap-1.5 bg-slate-950/60 p-2 rounded-xl text-[10px] text-slate-400 border border-slate-800/60">
           {/* Network Simulator */}
           <button
             onClick={() => setIsNetworkOnline((prev) => !prev)}

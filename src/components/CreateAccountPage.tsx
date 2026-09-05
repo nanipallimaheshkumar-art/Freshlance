@@ -505,12 +505,12 @@ export const CreateAccountPage: React.FC<CreateAccountPageProps> = ({
           {step === 'verify_otp' && (
             <form onSubmit={handleVerifyAndRegister} className="space-y-4">
               {/* Destination Pill & Edit Button */}
-              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between">
-                <div>
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between gap-2">
+                <div className="min-w-0 flex-1">
                   <p className="text-[11px] text-slate-500 font-medium">Verification code dispatched to:</p>
-                  <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5 mt-0.5">
+                  <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5 mt-0.5 min-w-0">
                     <Mail className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    <span className="truncate max-w-[210px] sm:max-w-[280px]">{email}</span>
+                    <span className="truncate">{email}</span>
                   </p>
                 </div>
                 <button

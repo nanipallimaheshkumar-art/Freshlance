@@ -20,12 +20,12 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   const isAvailable = item.isAvailableToday ?? true;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
       {/* Backdrop */}
       <div onClick={onClose} className="absolute inset-0 bg-slate-900/50 backdrop-blur-xs" />
 
       {/* Modal Content */}
-      <div className="relative w-full max-w-2xl bg-white border border-slate-200 rounded-[2rem] overflow-hidden shadow-2xl z-10 max-h-[92vh] flex flex-col md:flex-row">
+      <div className="relative w-full max-w-2xl bg-white border border-slate-200 rounded-2xl sm:rounded-[2rem] overflow-y-auto md:overflow-hidden shadow-2xl z-10 max-h-[92vh] flex flex-col md:flex-row">
         {/* Close Button */}
         <button
           onClick={onClose}
@@ -35,7 +35,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
         </button>
 
         {/* Real Produce Photo Side */}
-        <div className="md:w-1/2 relative min-h-[240px] md:min-h-full bg-slate-100">
+        <div className="md:w-1/2 relative min-h-[200px] sm:min-h-[240px] md:min-h-full bg-slate-100 shrink-0">
           <img
             src={item.image}
             alt={item.name}
@@ -58,7 +58,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
         </div>
 
         {/* Info & Purchase Side */}
-        <div className="md:w-1/2 p-6 flex flex-col justify-between overflow-y-auto">
+        <div className="md:w-1/2 p-4 sm:p-6 flex flex-col justify-between overflow-y-auto">
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-2 py-0.5 rounded">

@@ -165,11 +165,11 @@ export const Storefront: React.FC<StorefrontProps> = ({
                     className="w-full h-11 pl-9 pr-3 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 text-slate-900 placeholder:text-slate-400 transition-all"
                   />
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 w-full sm:w-auto">
                   <button
                     type="button"
                     onClick={() => handleCheckLocation()}
-                    className="h-11 px-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap transition-colors"
+                    className="flex-1 sm:flex-initial h-11 px-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap transition-colors"
                   >
                     <span>Check Range</span>
                   </button>
@@ -178,7 +178,7 @@ export const Storefront: React.FC<StorefrontProps> = ({
                     onClick={handleDetectGps}
                     disabled={isDetectingGps}
                     title="Detect Current GPS Location"
-                    className="h-11 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap"
+                    className="flex-1 sm:flex-initial h-11 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap"
                   >
                     {isDetectingGps ? (
                       <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />

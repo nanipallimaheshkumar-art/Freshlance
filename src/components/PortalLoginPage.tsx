@@ -193,7 +193,7 @@ export const PortalLoginPage: React.FC<PortalLoginPageProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center py-12 px-4 selection:bg-emerald-500 selection:text-white font-sans">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center py-8 px-3 sm:px-4 selection:bg-emerald-500 selection:text-white font-sans w-full max-w-full overflow-x-hidden">
       <div className="w-full max-w-md">
         {/* Top Back Link */}
         <div className="mb-6 flex items-center justify-between">
@@ -210,7 +210,7 @@ export const PortalLoginPage: React.FC<PortalLoginPageProps> = ({
         </div>
 
         {/* Portal Authentication Card */}
-        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl p-5 sm:p-8 shadow-2xl relative overflow-hidden">
           {/* Subtle accent glow */}
           <div
             className={`absolute -top-24 -right-24 w-48 h-48 rounded-full blur-3xl pointer-events-none opacity-20 ${

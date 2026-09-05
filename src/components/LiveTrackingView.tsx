@@ -226,7 +226,7 @@ export const LiveTrackingView: React.FC<LiveTrackingViewProps> = ({
 
           {/* Delivery OTP Badge */}
           {!isDelivered && (
-            <div className="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-4 text-center shrink-0 min-w-[170px]">
+            <div className="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-4 text-center w-full sm:w-auto sm:min-w-[170px]">
               <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                 Delivery PIN (OTP)
               </div>
