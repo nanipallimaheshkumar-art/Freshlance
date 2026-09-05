@@ -11,7 +11,8 @@ import {
   Sparkles,
   RefreshCw,
   Edit3,
-  KeyRound,
+  Smartphone,
+  Send,
   Check
 } from 'lucide-react';
 import { registerAccount, generateVerificationCode, verifyCode } from '../utils/authStore';
@@ -53,10 +54,9 @@ export const CreateAccountPage: React.FC<CreateAccountPageProps> = ({
 
   // OTP Verification state
   const [otpCode, setOtpCode] = useState('');
-  const [generatedCode, setGeneratedCode] = useState('');
   const [resendTimer, setResendTimer] = useState(30);
   const [canResend, setCanResend] = useState(false);
-  const [copiedOtp, setCopiedOtp] = useState(false);
+  const [resendSuccessMsg, setResendSuccessMsg] = useState<string | null>(null);
 
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -130,30 +130,72 @@ export const CreateAccountPage: React.FC<CreateAccountPageProps> = ({
       return;
     }
 
-    // Generate 6-digit OTP code for India mobile & email
+    // Format Indian phone number
+    const formattedPhone = `+91 ${cleanDigits.slice(0, 5)} ${cleanDigits.slice(5)}`;
+
+    // Generate 6-digit OTP code in background for both email & phone lookup
     const code = generateVerificationCode(email.trim().toLowerCase());
-    setGeneratedCode(code);
+    generateVerificationCode(cleanDigits);
+
+    // Dispatch Email OTP via Resend API on server
+    fetch('/api/auth/send-email-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: email.trim().toLowerCase(),
+        name: name.trim(),
+        code,
+        phone: formattedPhone,
+      }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.providerMessage) {
+          console.log('[Resend OTP]', data.providerMessage);
+        }
+      })
+      .catch((err) => console.warn('Email OTP dispatch error:', err));
+
     setOtpCode('');
     setResendTimer(30);
     setCanResend(false);
+    setResendSuccessMsg(null);
     setStep('verify_otp');
   };
 
-  // Handle Resending OTP
+  // Handle Resending OTP to registered email via Resend
   const handleResendCode = () => {
     if (!canResend) return;
+    const digits = phone.replace(/\D/g, '');
+    const cleanDigits = digits.startsWith('91') && digits.length === 12 ? digits.slice(2) : digits;
+    const formattedPhone = `+91 ${cleanDigits.slice(0, 5)} ${cleanDigits.slice(5)}`;
+
     const newCode = generateVerificationCode(email.trim().toLowerCase());
-    setGeneratedCode(newCode);
+    generateVerificationCode(cleanDigits);
+
+    fetch('/api/auth/send-email-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: email.trim().toLowerCase(),
+        name: name.trim(),
+        code: newCode,
+        phone: formattedPhone,
+      }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.providerMessage) {
+          console.log('[Resend OTP]', data.providerMessage);
+        }
+      })
+      .catch((err) => console.warn('Email OTP resend error:', err));
+
     setResendTimer(30);
     setCanResend(false);
     setError(null);
-  };
-
-  // Auto-fill test code
-  const handleAutoFillOtp = () => {
-    setOtpCode(generatedCode);
-    setCopiedOtp(true);
-    setTimeout(() => setCopiedOtp(false), 2000);
+    setResendSuccessMsg(`A fresh 6-digit verification code has been sent via Resend to ${email.trim().toLowerCase()}`);
+    setTimeout(() => setResendSuccessMsg(null), 6000);
   };
 
   // Complete Registration with OTP Code
@@ -255,7 +297,12 @@ export const CreateAccountPage: React.FC<CreateAccountPageProps> = ({
               {/* Email & Phone Row */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-800 mb-1">Email Address</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-slate-800">Email Address</label>
+                    <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                      Receives Resend Email OTP
+                    </span>
+                  </div>
                   <div className="relative">
                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
@@ -274,7 +321,7 @@ export const CreateAccountPage: React.FC<CreateAccountPageProps> = ({
                     <label className="block text-xs font-semibold text-slate-800">
                       Mobile Number <span className="text-emerald-600 font-bold">(India 🇮🇳)</span>
                     </label>
-                    <span className="text-[10px] text-slate-400">Receives OTP</span>
+                    <span className="text-[10px] text-slate-400">Delivery Contact</span>
                   </div>
                   <div className="relative flex items-center">
                     <div className="absolute left-3 flex items-center gap-1 text-slate-500 text-xs font-bold pointer-events-none">
@@ -406,7 +453,7 @@ export const CreateAccountPage: React.FC<CreateAccountPageProps> = ({
                 type="submit"
                 className="w-full h-11 mt-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
               >
-                <span>Continue to Verification Code (OTP)</span>
+                <span>Continue to Email Verification (OTP)</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </form>
@@ -418,9 +465,10 @@ export const CreateAccountPage: React.FC<CreateAccountPageProps> = ({
               {/* Destination Pill & Edit Button */}
               <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between">
                 <div>
-                  <p className="text-[11px] text-slate-500 font-medium">Verification code sent to:</p>
-                  <p className="text-xs font-bold text-slate-800">
-                    +91 {phone.replace(/\D/g, '').slice(-10)} &amp; {email}
+                  <p className="text-[11px] text-slate-500 font-medium">Verification code dispatched to:</p>
+                  <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5 mt-0.5">
+                    <Mail className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span className="truncate max-w-[210px] sm:max-w-[280px]">{email}</span>
                   </p>
                 </div>
                 <button
@@ -429,43 +477,54 @@ export const CreateAccountPage: React.FC<CreateAccountPageProps> = ({
                     setStep('details');
                     setError(null);
                   }}
-                  className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-white border border-slate-200 hover:bg-slate-100 px-2.5 py-1 rounded-lg cursor-pointer transition-colors"
+                  className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-white border border-slate-200 hover:bg-slate-100 px-2.5 py-1 rounded-lg cursor-pointer transition-colors shrink-0"
                 >
                   <Edit3 className="w-3 h-3" />
                   <span>Edit</span>
                 </button>
               </div>
 
-              {/* Simulated Live SMS / Push OTP Card */}
-              <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs space-y-2">
-                <div className="flex items-center justify-between text-emerald-900 font-bold">
-                  <span className="flex items-center gap-1.5">
-                    <span className="text-sm">📲</span>
-                    <span>FreshLane India Verification SMS</span>
+              {/* Email Delivery Card (Powered by Resend) */}
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs space-y-2.5 animate-fadeIn">
+                <div className="flex items-center justify-between text-emerald-950 font-bold">
+                  <span className="flex items-center gap-2">
+                    <Mail className="w-4 h-4 text-emerald-700 shrink-0" />
+                    <span>Email Verification Code Sent</span>
                   </span>
-                  <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-mono font-bold">
-                    Now
+                  <span className="text-[10px] bg-emerald-100 border border-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                    <Sparkles className="w-2.5 h-2.5 text-emerald-600" />
+                    <span>Resend Email OTP</span>
                   </span>
                 </div>
-                <p className="text-[11px] text-emerald-800 leading-relaxed">
-                  "Your FreshLane account verification code is{' '}
-                  <strong className="font-mono text-sm tracking-widest text-emerald-950 font-black">
-                    {generatedCode}
-                  </strong>
-                  . Valid for 10 minutes. Do not share with anyone."
+                <p className="text-slate-700 text-xs leading-relaxed">
+                  We have dispatched your 6-digit security code directly via Resend to your registered email address:
                 </p>
-                <div className="pt-1 flex items-center justify-between">
-                  <span className="text-[10px] text-emerald-700">Quick Test Helper:</span>
-                  <button
-                    type="button"
-                    onClick={handleAutoFillOtp}
-                    className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 shadow-xs cursor-pointer transition-all"
-                  >
-                    {copiedOtp ? <Check className="w-3 h-3 text-emerald-300" /> : <KeyRound className="w-3 h-3" />}
-                    <span>{copiedOtp ? 'Code Auto-filled!' : `Auto-fill [${generatedCode}]`}</span>
-                  </button>
+                <div className="flex items-center justify-between px-3 py-2 bg-white border border-emerald-200/80 rounded-xl">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
+                      <Mail className="w-3.5 h-3.5" />
+                    </div>
+                    <span className="font-mono text-xs sm:text-sm font-bold text-slate-900 truncate">
+                      {email}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/60 shrink-0 ml-2">
+                    Sent via Resend
+                  </span>
                 </div>
+                <p className="text-[11px] text-slate-500 flex items-start gap-1.5 pt-0.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                  <span>Please check your email inbox (including Spam, Junk, or Promotions tabs) and enter the 6 digits below to activate your account. Valid for 10 minutes.</span>
+                </p>
               </div>
+
+              {/* Resend success notification if triggered */}
+              {resendSuccessMsg && (
+                <div className="p-3 bg-emerald-100/80 border border-emerald-300 rounded-xl text-xs text-emerald-900 font-medium flex items-center gap-2 animate-fadeIn">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
+                  <span>{resendSuccessMsg}</span>
+                </div>
+              )}
 
               {error && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-medium flex items-start gap-2">

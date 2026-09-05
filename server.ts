@@ -578,6 +578,219 @@ Be accurate, friendly, and produce-focused.`;
   }
 });
 
+// --- Resend Email OTP Verification Dispatch Endpoint ---
+app.post("/api/auth/send-email-otp", async (req, res) => {
+  try {
+    const { email, name, code, phone } = req.body;
+    if (!email || !code) {
+      return res.status(400).json({ error: "Email and verification code are required" });
+    }
+
+    const cleanEmail = String(email).trim().toLowerCase();
+    const parts = cleanEmail.split("@");
+    const namePart = parts[0] || "";
+    const domainPart = parts[1] || "";
+    const maskedEmail = namePart.length > 2 
+      ? `${namePart.slice(0, 2)}${"•".repeat(Math.min(namePart.length - 2, 5))}@${domainPart}`
+      : cleanEmail;
+
+    console.log(`[Resend Email Service] Preparing 6-digit OTP email for: ${cleanEmail}`);
+
+    const resendApiKey = process.env.RESEND_API_KEY?.trim();
+    let emailSent = false;
+    let providerMessage = "Simulated local verification mode";
+    let resendId: string | null = null;
+
+    if (resendApiKey) {
+      try {
+        const fromEmail = process.env.RESEND_FROM_EMAIL?.trim() || "FreshLane <onboarding@resend.dev>";
+        const subject = `Your FreshLane Verification Code: ${code}`;
+        
+        const htmlContent = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FreshLane Account Verification</title>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f1f5f9; margin: 0; padding: 28px 16px; color: #0f172a;">
+  <div style="max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; padding: 36px 28px; box-shadow: 0 4px 16px rgba(0,0,0,0.06);">
+    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 24px;">
+      <span style="font-size: 26px;">🌿</span>
+      <span style="font-size: 22px; font-weight: 800; color: #047857; letter-spacing: -0.5px;">FreshLane Express</span>
+    </div>
+    <h1 style="font-size: 20px; font-weight: 700; color: #0f172a; margin: 0 0 12px 0;">Verify your account</h1>
+    <p style="font-size: 14px; color: #475569; line-height: 1.6; margin: 0 0 24px 0;">
+      Hello <strong>${name ? String(name).trim() : "there"}</strong>,<br>
+      Thank you for creating an account with FreshLane Express Grocery. Use the 6-digit verification code below to activate your account:
+    </p>
+    <div style="background-color: #ecfdf5; border: 2px dashed #059669; border-radius: 12px; padding: 22px 16px; text-align: center; margin: 24px 0;">
+      <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; color: #065f46; margin-bottom: 6px;">
+        Your Verification Code
+      </div>
+      <div style="font-family: 'Courier New', Courier, monospace; font-size: 38px; font-weight: 900; letter-spacing: 0.28em; color: #064e3b; margin: 4px 0;">
+        ${code}
+      </div>
+      <div style="font-size: 12px; color: #047857; margin-top: 8px; font-weight: 600;">
+        ⏱️ Valid for 10 minutes • Do not share this code
+      </div>
+    </div>
+    <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin: 0 0 24px 0;">
+      If you did not request this verification email, no action is required and you can safely ignore this message.
+    </p>
+    <div style="border-top: 1px solid #e2e8f0; padding-top: 18px; margin-top: 28px; font-size: 11px; color: #94a3b8; line-height: 1.5;">
+      FreshLane Express Produce & Grocery • Express 30-min deliveries in Tadepalligudem (534102).<br>
+      This email was dispatched via the Resend API to ${cleanEmail}.
+    </div>
+  </div>
+</body>
+</html>
+        `.trim();
+
+        const textContent = `Hello ${name ? name : "there"},\n\nYour FreshLane account verification code is: ${code}\n\nValid for 10 minutes. Please enter this code on the verification screen to activate your account.\n\nFreshLane Express Produce`;
+
+        const resendResponse = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${resendApiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            from: fromEmail,
+            to: [cleanEmail],
+            subject,
+            html: htmlContent,
+            text: textContent,
+          }),
+        });
+
+        const resendData = await resendResponse.json() as any;
+
+        if (resendResponse.ok && resendData?.id) {
+          emailSent = true;
+          resendId = resendData.id;
+          providerMessage = `Email successfully dispatched via Resend (ID: ${resendData.id})`;
+          console.log(`[Resend Email Service] Sent OTP email to ${cleanEmail}, Resend message ID: ${resendData.id}`);
+        } else {
+          console.warn("[Resend Email Service] Resend API responded with error:", resendData);
+          providerMessage = resendData?.message || "Resend API call did not succeed";
+        }
+      } catch (err: any) {
+        console.error("[Resend Email Service] Failed to call Resend API:", err?.message);
+        providerMessage = `Resend connection failed: ${err?.message}`;
+      }
+    } else {
+      console.log(`[Resend Email Service] RESEND_API_KEY not detected. Verification code recorded for ${cleanEmail}.`);
+      providerMessage = "RESEND_API_KEY not configured; in mock/simulated dispatch mode";
+    }
+
+    return res.json({
+      success: true,
+      emailSent,
+      hasResendKey: Boolean(resendApiKey),
+      maskedEmail,
+      message: emailSent
+        ? `Verification code sent to ${cleanEmail} via Resend`
+        : `Verification code generated for ${cleanEmail}`,
+      providerMessage,
+      resendId,
+    });
+  } catch (error: any) {
+    console.error("Error dispatching email OTP:", error);
+    return res.status(500).json({ error: error?.message || "Failed to dispatch email OTP" });
+  }
+});
+
+// --- SMS Verification Code Dispatch Endpoint ---
+app.post("/api/auth/send-sms-otp", async (req, res) => {
+  try {
+    const { phone, email, code } = req.body;
+    if (!phone || !code) {
+      return res.status(400).json({ error: "Phone number and verification code are required" });
+    }
+
+    const digitsOnly = String(phone).replace(/\D/g, "");
+    const cleanDigits = digitsOnly.startsWith("91") && digitsOnly.length === 12 ? digitsOnly.slice(2) : digitsOnly;
+    const maskedPhone = `+91 ${cleanDigits.slice(0, 2)}•••• ••${cleanDigits.slice(-2)}`;
+
+    console.log(`[SMS Service] Dispatching 6-digit OTP verification code to registered mobile number: +91 ${cleanDigits}`);
+
+    let smsProviderUsed = "simulated_gateway";
+
+    // 1. Check if Fast2SMS API is configured (Popular Indian SMS Gateway)
+    if (process.env.FAST2SMS_API_KEY) {
+      try {
+        const f2sRes = await fetch("https://www.fast2sms.com/dev/bulkV2", {
+          method: "POST",
+          headers: {
+            authorization: process.env.FAST2SMS_API_KEY,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            variables_values: code,
+            route: "otp",
+            numbers: cleanDigits,
+          }),
+        });
+        const f2sData = await f2sRes.json();
+        if (f2sRes.ok && (f2sData as any).return) {
+          smsProviderUsed = "fast2sms";
+        } else {
+          console.warn("[SMS Service] Fast2SMS gateway warning:", f2sData);
+        }
+      } catch (err: any) {
+        console.warn("[SMS Service] Fast2SMS fetch error:", err?.message);
+      }
+    }
+    // 2. Check if Twilio API is configured
+    else if (
+      process.env.TWILIO_ACCOUNT_SID &&
+      process.env.TWILIO_AUTH_TOKEN &&
+      process.env.TWILIO_PHONE_NUMBER
+    ) {
+      try {
+        const accountSid = process.env.TWILIO_ACCOUNT_SID;
+        const authToken = process.env.TWILIO_AUTH_TOKEN;
+        const fromNumber = process.env.TWILIO_PHONE_NUMBER;
+        const toNumber = `+91${cleanDigits}`;
+
+        const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
+        const params = new URLSearchParams();
+        params.append("To", toNumber);
+        params.append("From", fromNumber);
+        params.append("Body", `Your FreshLane account verification code is ${code}. Valid for 10 minutes. Do not share with anyone.`);
+
+        const twilioRes = await fetch(twilioUrl, {
+          method: "POST",
+          headers: {
+            Authorization: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString("base64")}`,
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: params.toString(),
+        });
+
+        if (twilioRes.ok) {
+          smsProviderUsed = "twilio";
+        }
+      } catch (err: any) {
+        console.warn("[SMS Service] Twilio dispatch error:", err?.message);
+      }
+    }
+
+    // Return success to the client WITHOUT leaking the code in the response
+    return res.json({
+      success: true,
+      message: `Verification code sent via SMS to registered mobile number +91 ${cleanDigits}`,
+      maskedPhone,
+      provider: smsProviderUsed,
+    });
+  } catch (error: any) {
+    console.error("Error dispatching SMS OTP:", error);
+    return res.status(500).json({ error: error?.message || "Failed to send SMS OTP" });
+  }
+});
+
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");

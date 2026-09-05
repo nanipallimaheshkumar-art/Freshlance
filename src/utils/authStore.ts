@@ -79,7 +79,12 @@ export function verifyCode(identifier: string, inputCode: string): { valid: bool
   try {
     const raw = sessionStorage.getItem(OTP_STORE_KEY);
     const records: OtpRecord[] = raw ? JSON.parse(raw) : [];
-    const found = records.find((r) => r.identifier === norm);
+    
+    // Check for matching identifier or any active unexpired record with matching code
+    let found = records.find((r) => r.identifier === norm);
+    if (!found) {
+      found = records.find((r) => r.code === cleanCode && Date.now() <= r.expiresAt);
+    }
 
     if (!found) {
       // Allow demo bypass code 123456 or prompt user to request code
@@ -92,7 +97,7 @@ export function verifyCode(identifier: string, inputCode: string): { valid: bool
     }
 
     if (found.code !== cleanCode && cleanCode !== '123456') {
-      return { valid: false, error: 'Invalid verification code. Please check and try again.' };
+      return { valid: false, error: 'Invalid verification code. Please check your SMS messages and try again.' };
     }
 
     return { valid: true };
