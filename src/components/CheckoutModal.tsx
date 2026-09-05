@@ -65,7 +65,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     return (
       localStorage.getItem('freshlane_razorpay_key') ||
       (import.meta as any).env?.VITE_RAZORPAY_KEY_ID ||
-      'rzp_test_TXoUBcTgIq9Wfa'
+      'rzp_live_TYCJiSOV0TpCse'
     );
   });
   const [cloudflareWorkerUrl, setCloudflareWorkerUrl] = useState<string>(() => {
@@ -291,8 +291,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         throw new Error('Razorpay order ID was not received from the server.');
       }
 
-      // Step 2: Open Standard Razorpay Checkout Modal
-      const activeKey = razorpayKeyId || serverKeyId || (import.meta as any).env?.VITE_RAZORPAY_KEY_ID || 'rzp_test_TXoUBcTgIq9Wfa';
+      // Step 2: Open Standard Razorpay Checkout Modal (using live server key)
+      const activeKey = serverKeyId || razorpayKeyId || (import.meta as any).env?.VITE_RAZORPAY_KEY_ID || 'rzp_live_TYCJiSOV0TpCse';
 
       const options = {
         key: activeKey,
@@ -613,12 +613,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     </p>
                     <div className="space-y-1.5">
                       <div>
-                        <label className="text-[10px] text-slate-400 block mb-0.5">Razorpay Key ID (Live / Test)</label>
+                        <label className="text-[10px] text-slate-400 block mb-0.5">Razorpay Key ID (Live)</label>
                         <input
                           type="text"
                           defaultValue={razorpayKeyId}
                           id="razorpay-key-input"
-                          placeholder="rzp_test_... or rzp_live_..."
+                          placeholder="rzp_live_..."
                           className="w-full px-2.5 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white font-mono outline-none"
                         />
                       </div>

@@ -115,7 +115,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ user, onGoToShop
     return (
       localStorage.getItem('freshlane_razorpay_key') ||
       (import.meta as any).env?.VITE_RAZORPAY_KEY_ID ||
-      'rzp_test_51FreshLaneKey'
+      'rzp_live_TYCJiSOV0TpCse'
     );
   });
   const [razorpaySaved, setRazorpaySaved] = useState(false);
@@ -654,7 +654,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ user, onGoToShop
                 type="text"
                 value={razorpayKey}
                 onChange={(e) => setRazorpayKey(e.target.value)}
-                placeholder="rzp_live_... or rzp_test_..."
+                placeholder="rzp_live_..."
                 className="w-full text-xs font-mono p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 text-slate-900"
                 required
               />

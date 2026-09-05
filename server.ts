@@ -43,8 +43,8 @@ app.use(express.json({ limit: "20mb" }));
 // Lazy initializer for Razorpay client
 let razorpayClient: Razorpay | null = null;
 function getRazorpay(): Razorpay {
-  const key_id = process.env.RAZORPAY_KEY_ID || "rzp_live_TXuXQYEDf7QJgT";
-  const key_secret = process.env.RAZORPAY_KEY_SECRET || "Pybkl8UcoRJpaLvbfwtE0ibn";
+  const key_id = process.env.RAZORPAY_KEY_ID || "rzp_live_TYCJiSOV0TpCse";
+  const key_secret = process.env.RAZORPAY_KEY_SECRET || "cTzIdv5fZ5AYRAkS1DpgH72j";
 
   if (!key_id || !key_secret) {
     throw new Error("Razorpay credentials (RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET) must be set in the environment.");
@@ -89,7 +89,7 @@ app.get("/api/health", (_req, res) => {
     hubCoords: FRESHLANE_HUB_COORDS,
     hasApiKey: Boolean(process.env.GEMINI_API_KEY),
     hasRazorpayConfig: Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET),
-    razorpayKeyId: process.env.RAZORPAY_KEY_ID || "rzp_live_TXuXQYEDf7QJgT",
+    razorpayKeyId: process.env.RAZORPAY_KEY_ID || "rzp_live_TYCJiSOV0TpCse",
     timestamp: new Date().toISOString(),
   });
 });
@@ -217,7 +217,7 @@ app.post("/api/create-order", async (req, res) => {
       order_id: order.id,
       amount: order.amount,
       currency: order.currency,
-      key_id: process.env.RAZORPAY_KEY_ID || "rzp_live_TXuXQYEDf7QJgT",
+      key_id: process.env.RAZORPAY_KEY_ID || "rzp_live_TYCJiSOV0TpCse",
     });
   } catch (error: any) {
     console.error("Razorpay order creation failed:", error);
