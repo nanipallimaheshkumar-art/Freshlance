@@ -144,8 +144,11 @@ export const CreateAccountPage: React.FC<CreateAccountPageProps> = ({
     generateVerificationCode(cleanDigits);
     setEmailDeliveryInfo(null);
 
+    const cfUrl = typeof window !== 'undefined' ? (localStorage.getItem('freshlane_cloudflare_url') || '').trim().replace(/\/$/, '') : '';
+    const otpEndpoint = cfUrl ? `${cfUrl}/api/auth/send-email-otp` : '/api/auth/send-email-otp';
+
     // Dispatch Email OTP via Resend API on server
-    fetch('/api/auth/send-email-otp', {
+    fetch(otpEndpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -195,7 +198,10 @@ export const CreateAccountPage: React.FC<CreateAccountPageProps> = ({
     generateVerificationCode(cleanDigits);
     setEmailDeliveryInfo(null);
 
-    fetch('/api/auth/send-email-otp', {
+    const cfUrl = typeof window !== 'undefined' ? (localStorage.getItem('freshlane_cloudflare_url') || '').trim().replace(/\/$/, '') : '';
+    const otpEndpoint = cfUrl ? `${cfUrl}/api/auth/send-email-otp` : '/api/auth/send-email-otp';
+
+    fetch(otpEndpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

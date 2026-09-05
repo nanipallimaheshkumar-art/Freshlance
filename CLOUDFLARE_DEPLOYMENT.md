@@ -23,11 +23,12 @@ Configure these in the Cloudflare Dashboard under **Settings → Variables & Sec
 
 | Variable Name | Description | Example / Recommended |
 |---|---|---|
-| `RAZORPAY_KEY_ID` | Your Razorpay Key ID | `rzp_live_...` or `rzp_test_TXoUBcTgIq9Wfa` |
-| `RAZORPAY_KEY_SECRET` | Your Razorpay Key Secret | `FHUDLFkILqXAGuSNoARdn76o` *(Set as Secret)* |
+| `RAZORPAY_KEY_ID` | Your Razorpay Key ID | `rzp_live_TYCJiSOV0TpCse` (Live Mode) |
+| `RAZORPAY_KEY_SECRET` | Your Razorpay Key Secret | *(Your live key secret - Set as Secret)* |
+| `VITE_RAZORPAY_KEY_ID` | Client-side Razorpay Key ID | `rzp_live_TYCJiSOV0TpCse` (Live Mode) |
 | `GEMINI_API_KEY` | *(Optional)* Google Gemini AI API key | `AIzaSy...` *(Set as Secret)* |
-| `RESEND_API_KEY` | Resend API Key for Email OTP verification | `re_...` *(Set as Secret)* |
-| `RESEND_FROM_EMAIL` | *(Optional)* Verified sender email | `FreshLane Express <onboarding@resend.dev>` |
+| `RESEND_API_KEY` | Resend API Key for Email OTP verification | *(Your Resend API Key - Set as Secret)* |
+| `RESEND_FROM_EMAIL` | Verified sender email | `FreshLane <noreply@freshlanefruits.online>` |
 
 ---
 
