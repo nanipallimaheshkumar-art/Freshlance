@@ -26,6 +26,8 @@ Configure these in the Cloudflare Dashboard under **Settings → Variables & Sec
 | `RAZORPAY_KEY_ID` | Your Razorpay Key ID | `rzp_live_...` or `rzp_test_TXoUBcTgIq9Wfa` |
 | `RAZORPAY_KEY_SECRET` | Your Razorpay Key Secret | `FHUDLFkILqXAGuSNoARdn76o` *(Set as Secret)* |
 | `GEMINI_API_KEY` | *(Optional)* Google Gemini AI API key | `AIzaSy...` *(Set as Secret)* |
+| `RESEND_API_KEY` | Resend API Key for Email OTP verification | `re_...` *(Set as Secret)* |
+| `RESEND_FROM_EMAIL` | *(Optional)* Verified sender email | `FreshLane Express <onboarding@resend.dev>` |
 
 ---
 

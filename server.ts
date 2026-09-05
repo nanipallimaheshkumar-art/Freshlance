@@ -607,7 +607,7 @@ app.post("/api/auth/send-email-otp", async (req, res) => {
 
     if (resendApiKey) {
       try {
-        let fromEmail = (process.env.RESEND_FROM_EMAIL?.trim() || "FreshLane <onboarding@resend.dev>").trim();
+        let fromEmail = (process.env.RESEND_FROM_EMAIL?.trim() || "FreshLane <noreply@freshlanefruits.online>").trim();
         if (
           !fromEmail ||
           fromEmail.includes("@gmail.com") ||
@@ -615,7 +615,7 @@ app.post("/api/auth/send-email-otp", async (req, res) => {
           fromEmail.includes("@outlook.com") ||
           fromEmail.includes("@hotmail.com")
         ) {
-          fromEmail = "FreshLane Express <onboarding@resend.dev>";
+          fromEmail = "FreshLane <noreply@freshlanefruits.online>";
         }
         const subject = `Your FreshLane Verification Code: ${code}`;
         
@@ -683,64 +683,14 @@ app.post("/api/auth/send-email-otp", async (req, res) => {
         if (resendResponse.ok && resendData?.id) {
           emailSent = true;
           resendId = resendData.id;
-          providerMessage = `Email successfully dispatched via Resend (ID: ${resendData.id})`;
-          console.log(`[Resend Email Service] Sent OTP email to ${cleanEmail}, Resend message ID: ${resendData.id}`);
-        } else if (resendData?.name === "validation_error" && typeof resendData?.message === "string" && resendData.message.includes("freshlanefruits@gmail.com")) {
-          // In Resend's free tier without a custom verified domain, direct deliveries are restricted to the account owner mailbox.
-          // We deliver the OTP notification to freshlanefruits@gmail.com so the owner receives the OTP and can supply it to the customer.
-          console.log(`[Resend Email Service] Forwarding customer OTP for ${cleanEmail} to freshlanefruits@gmail.com`);
-          try {
-            const ownerNotificationResponse = await fetch("https://api.resend.com/emails", {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${resendApiKey}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                from: fromEmail,
-                to: ["freshlanefruits@gmail.com"],
-                subject: `FreshLane OTP for ${cleanEmail}: ${code}`,
-                html: `
-                  <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
-                    <h2 style="color: #065f46; margin-top: 0; font-size: 20px;">Customer Account Verification Request</h2>
-                    <p style="color: #334155; font-size: 14px; line-height: 1.5;">
-                      A customer just initiated registration on FreshLane with the email address <strong>${cleanEmail}</strong>.
-                    </p>
-                    <div style="background-color: #ecfdf5; border: 2px dashed #059669; border-radius: 10px; padding: 18px; text-align: center; margin: 20px 0;">
-                      <div style="font-size: 11px; font-weight: bold; text-transform: uppercase; color: #065f46; letter-spacing: 0.1em; margin-bottom: 4px;">Customer Verification Code</div>
-                      <div style="font-size: 36px; font-weight: 900; letter-spacing: 0.25em; color: #064e3b; font-family: monospace;">${code}</div>
-                      <div style="font-size: 12px; color: #047857; margin-top: 6px;">⏱️ Valid for 10 minutes</div>
-                    </div>
-                    <table style="width: 100%; border-collapse: collapse; font-size: 13px; margin: 16px 0;">
-                      <tr><td style="padding: 6px 0; color: #64748b;">Customer Name:</td><td style="font-weight: bold; color: #0f172a;">${name || 'Customer'}</td></tr>
-                      <tr><td style="padding: 6px 0; color: #64748b;">Customer Email:</td><td style="font-weight: bold; color: #0f172a;">${cleanEmail}</td></tr>
-                    </table>
-                    <p style="font-size: 12px; color: #64748b; line-height: 1.5; border-top: 1px solid #e2e8f0; padding-top: 12px; margin-top: 20px;">
-                      Please provide this code to the customer at <strong>${cleanEmail}</strong> to complete their signup.
-                    </p>
-                  </div>
-                `.trim(),
-                text: `FreshLane OTP for ${cleanEmail}: ${code}\n\nCustomer: ${name || 'Customer'}\nEmail: ${cleanEmail}\n\nPlease provide this 6-digit code to the customer.`,
-              }),
-            });
-            const ownerData = await ownerNotificationResponse.json() as any;
-            if (ownerNotificationResponse.ok && ownerData?.id) {
-              emailSent = true;
-              resendId = ownerData.id;
-              providerMessage = `Verification OTP delivered to freshlanefruits@gmail.com for forwarding to ${cleanEmail}`;
-              console.log(`[Resend Email Service] Customer OTP delivered to owner mailbox freshlanefruits@gmail.com (ID: ${ownerData.id})`);
-            } else {
-              providerMessage = ownerData?.message || "Delivery pending";
-            }
-          } catch (forwardErr: any) {
-            console.log("[Resend Email Service] Forwarding notification notice:", forwardErr?.message);
-          }
+          providerMessage = `Email successfully dispatched to ${cleanEmail} via Resend (ID: ${resendData.id})`;
+          console.log(`[Resend Email Service] Sent OTP email directly to customer: ${cleanEmail}, Resend message ID: ${resendData.id}`);
         } else {
-          console.log("[Resend Email Service] Resend API notice:", resendData?.message || resendData);
+          console.log("[Resend Email Service] Resend dispatch status:", resendData?.message || resendData);
           providerMessage = resendData?.message || "Resend API call did not succeed";
         }
       } catch (err: any) {
-        console.log("[Resend Email Service] Resend API notice:", err?.message);
+        console.log("[Resend Email Service] Resend error:", err?.message);
         providerMessage = `Resend connection notice: ${err?.message}`;
       }
     } else {

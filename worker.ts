@@ -14,6 +14,8 @@ export interface Env {
   RAZORPAY_KEY_ID?: string;
   RAZORPAY_KEY_SECRET?: string;
   GEMINI_API_KEY?: string;
+  RESEND_API_KEY?: string;
+  RESEND_FROM_EMAIL?: string;
   TADEPALLIGUDEM_HUB_LAT?: string;
   TADEPALLIGUDEM_HUB_LNG?: string;
   DELIVERY_MAX_RADIUS_KM?: string;
@@ -421,6 +423,132 @@ export default {
         suggestedUses: ["Fresh chilled slices", "Thick mango smoothie", "Traditional aamras"],
         estimatedPriceINR: 180,
       });
+    }
+
+    // 10. Send Email OTP via Resend (Dynamic customer recipient)
+    if (url.pathname === "/api/auth/send-email-otp" && request.method === "POST") {
+      try {
+        const body = (await request.json()) as any;
+        const { email, name, code } = body;
+        if (!email || !code) {
+          return jsonResponse({ error: "Email and verification code are required" }, 400);
+        }
+
+        // Dynamically extract customer's email from the frontend request
+        const customerEmail = String(email).trim().toLowerCase();
+        const parts = customerEmail.split("@");
+        const namePart = parts[0] || "";
+        const domainPart = parts[1] || "";
+        const maskedEmail = namePart.length > 2 
+          ? `${namePart.slice(0, 2)}${"•".repeat(Math.min(namePart.length - 2, 5))}@${domainPart}`
+          : customerEmail;
+
+        const resendApiKey = env.RESEND_API_KEY?.trim();
+        let emailSent = false;
+        let providerMessage = "Simulated verification mode";
+        let resendId: string | null = null;
+
+        if (resendApiKey) {
+          try {
+            let fromEmail = (env.RESEND_FROM_EMAIL?.trim() || "FreshLane <noreply@freshlanefruits.online>").trim();
+            if (
+              !fromEmail ||
+              fromEmail.includes("@gmail.com") ||
+              fromEmail.includes("@yahoo.com") ||
+              fromEmail.includes("@outlook.com") ||
+              fromEmail.includes("@hotmail.com")
+            ) {
+              fromEmail = "FreshLane <noreply@freshlanefruits.online>";
+            }
+
+            const subject = `Your FreshLane Verification Code: ${code}`;
+            const htmlContent = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FreshLane Account Verification</title>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f1f5f9; margin: 0; padding: 28px 16px; color: #0f172a;">
+  <div style="max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; padding: 36px 28px; box-shadow: 0 4px 16px rgba(0,0,0,0.06);">
+    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 24px;">
+      <span style="font-size: 26px;">🌿</span>
+      <span style="font-size: 22px; font-weight: 800; color: #047857; letter-spacing: -0.5px;">FreshLane Express</span>
+    </div>
+    <h1 style="font-size: 20px; font-weight: 700; color: #0f172a; margin: 0 0 12px 0;">Verify your account</h1>
+    <p style="font-size: 14px; color: #475569; line-height: 1.6; margin: 0 0 24px 0;">
+      Hello <strong>${name ? String(name).trim() : "there"}</strong>,<br>
+      Thank you for creating an account with FreshLane Express Grocery. Use the 6-digit verification code below to activate your account:
+    </p>
+    <div style="background-color: #ecfdf5; border: 2px dashed #059669; border-radius: 12px; padding: 22px 16px; text-align: center; margin: 24px 0;">
+      <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; color: #065f46; margin-bottom: 6px;">
+        Your Verification Code
+      </div>
+      <div style="font-family: 'Courier New', Courier, monospace; font-size: 38px; font-weight: 900; letter-spacing: 0.28em; color: #064e3b; margin: 4px 0;">
+        ${code}
+      </div>
+      <div style="font-size: 12px; color: #047857; margin-top: 8px; font-weight: 600;">
+        ⏱️ Valid for 10 minutes • Do not share this code
+      </div>
+    </div>
+    <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin: 0 0 24px 0;">
+      If you did not request this verification email, no action is required and you can safely ignore this message.
+    </p>
+    <div style="border-top: 1px solid #e2e8f0; padding-top: 18px; margin-top: 28px; font-size: 11px; color: #94a3b8; line-height: 1.5;">
+      FreshLane Express Produce & Grocery • Express 30-min deliveries in Tadepalligudem (534102).<br>
+      This email was dispatched via the Resend API to ${customerEmail}.
+    </div>
+  </div>
+</body>
+</html>`.trim();
+
+            const textContent = `Hello ${name ? name : "there"},\n\nYour FreshLane account verification code is: ${code}\n\nValid for 10 minutes. Please enter this code on the verification screen to activate your account.\n\nFreshLane Express Produce`;
+
+            // Pass customerEmail dynamically into Resend 'to:' field
+            const resendResponse = await fetch("https://api.resend.com/emails", {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${resendApiKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                from: fromEmail,
+                to: [customerEmail],
+                subject,
+                html: htmlContent,
+                text: textContent,
+              }),
+            });
+
+            const resendData = (await resendResponse.json()) as any;
+
+            if (resendResponse.ok && resendData?.id) {
+              emailSent = true;
+              resendId = resendData.id;
+              providerMessage = `Email successfully dispatched directly to ${customerEmail} via Resend (ID: ${resendData.id})`;
+            } else {
+              providerMessage = resendData?.message || "Resend API call did not succeed";
+            }
+          } catch (err: any) {
+            providerMessage = `Resend error: ${err?.message}`;
+          }
+        }
+
+        return jsonResponse({
+          success: true,
+          emailSent,
+          hasResendKey: Boolean(resendApiKey),
+          maskedEmail,
+          message: emailSent
+            ? `Verification code sent to ${customerEmail} via Resend`
+            : `Verification code generated for ${customerEmail}`,
+          providerMessage,
+          resendId,
+        });
+      } catch (err: any) {
+        return jsonResponse({ error: err.message || "Internal error sending email OTP" }, 500);
+      }
     }
 
     // Fallback for static assets in Cloudflare Workers
