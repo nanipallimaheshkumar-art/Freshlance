@@ -37,11 +37,16 @@ import {
   deleteProduceItem,
   updateStock,
   resetCatalogToDefault,
-  subscribeProduceCatalog
+  subscribeProduceCatalog,
+  updateRemoteProduct,
+  fetchRemoteCatalog,
 } from '../utils/produceStore';
 import { getUserOrders, updateOrderDriver } from '../utils/orderStore';
+import { getSessionToken } from '../utils/authStore';
+import { safeResponseJson } from '../utils/safeFetch';
 import { AdminFleetView } from './AdminFleetView';
 import { AdminAnalyticsView } from './AdminAnalyticsView';
+import { AdminUsersView } from './AdminUsersView';
 
 function decodeFallback(b64: string): string {
   try {
@@ -104,13 +109,22 @@ const PRODUCE_PHOTO_PRESETS = [
 ];
 
 export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ user, onGoToShop }) => {
-  const [activeTab, setActiveTab] = useState<'inventory' | 'orders' | 'drivers' | 'analytics' | 'razorpay'>('inventory');
+  const [activeTab, setActiveTab] = useState<'inventory' | 'orders' | 'drivers' | 'users' | 'analytics' | 'razorpay'>('inventory');
   const [produceList, setProduceList] = useState<ProduceItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
   const [tempPrice, setTempPrice] = useState<number>(0);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Edit Product Modal state
+  const [editingProduct, setEditingProduct] = useState<ProduceItem | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editPrice, setEditPrice] = useState<number>(0);
+  const [editStock, setEditStock] = useState<number>(0);
+  const [editAvailable, setEditAvailable] = useState<boolean>(true);
+  const [editOrganic, setEditOrganic] = useState<boolean>(false);
+  const [isSavingProduct, setIsSavingProduct] = useState(false);
 
   // Add Item Modal state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -140,13 +154,123 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ user, onGoToShop
 
   // Order management state
   const [orders, setOrders] = useState(() => getUserOrders());
+  const [isLoadingOrders, setIsLoadingOrders] = useState(false);
+
+  const fetchLiveOrders = async () => {
+    try {
+      setIsLoadingOrders(true);
+      const token = getSessionToken();
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+        headers['x-session-token'] = token;
+      }
+      const res = await fetch('/api/orders', { headers });
+      if (res.ok) {
+        const data = await safeResponseJson(res, { orders: [] });
+        if (Array.isArray(data?.orders) && data.orders.length > 0) {
+          // Map worker/backend order entities to UI records
+          const mapped: OrderRecord[] = data.orders.map((o: any) => ({
+            id: o.id,
+            itemCount: Array.isArray(o.items) ? o.items.length : 1,
+            timePlaced: o.createdAt ? new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now',
+            formattedDate: o.createdAt ? new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now',
+            timestamp: o.createdAt ? new Date(o.createdAt).getTime() : Date.now(),
+            customerName: o.customerName || 'Customer',
+            customerEmail: o.customerEmail || 'customer@freshlane.com',
+            itemsSummary: Array.isArray(o.items) ? o.items.join(', ') : 'Fresh produce items',
+            amount: o.totalAmount || 180,
+            address: o.customerAddress || 'Tadepalligudem, AP',
+            paymentMethod: o.paymentMethod || 'Razorpay Secure',
+            status: o.status === 'Delivered' ? 'delivered' : o.status === 'Pending' ? 'pending' : 'out_for_delivery',
+            promiseMinutes: o.etaMinutes || 25,
+            deliveryOtp: '4829',
+            driverName: o.driverName || (o.status === 'Pending' ? 'Unassigned' : 'Arjun S.'),
+            driverId: o.driverId,
+          }));
+          setOrders(mapped);
+        }
+      }
+    } catch (err) {
+      console.warn('Could not fetch server orders:', err);
+    } finally {
+      setIsLoadingOrders(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLiveOrders();
+    const interval = setInterval(fetchLiveOrders, 12000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleManualAssignOrder = async (orderId: string, driverId: string, driverName: string) => {
+    try {
+      const token = getSessionToken();
+      await fetch(`/api/admin/orders/${orderId}/assign`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          'x-session-token': token,
+        },
+        body: JSON.stringify({ driverId, driverName }),
+      });
+      updateOrderDriver(orderId, driverName);
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === orderId
+            ? { ...o, driverId, driverName, status: 'out_for_delivery' }
+            : o
+        )
+      );
+      showToast(`Order ${orderId} assigned to ${driverName}!`);
+    } catch {
+      updateOrderDriver(orderId, driverName);
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, driverName } : o))
+      );
+      showToast(`Order ${orderId} assigned locally to ${driverName}`);
+    }
+  };
 
   const handleReassignDriver = (orderId: string, newDriverName: string) => {
-    updateOrderDriver(orderId, newDriverName);
-    setOrders((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, driverName: newDriverName } : o))
-    );
-    showToast(`Order ${orderId} reassigned to ${newDriverName}`);
+    let driverId = 'DRV-101';
+    if (newDriverName.includes('Kiran') || newDriverName.includes('Farah')) driverId = 'DRV-102';
+    if (newDriverName.includes('Suresh') || newDriverName.includes('Vishal')) driverId = 'DRV-103';
+    handleManualAssignOrder(orderId, driverId, newDriverName);
+  };
+
+  const handleStartEditProduct = (item: ProduceItem) => {
+    setEditingProduct(item);
+    setEditName(item.name);
+    setEditPrice(item.price || item.pricePerKg || 50);
+    setEditStock(item.inStockKg);
+    setEditAvailable(item.isAvailableToday ?? true);
+    setEditOrganic(item.organicCertified ?? (item.category === 'organic'));
+  };
+
+  const handleSaveEditProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProduct) return;
+    setIsSavingProduct(true);
+    try {
+      await updateRemoteProduct(editingProduct.id, {
+        name: editName,
+        price: editPrice,
+        pricePerKg: editPrice,
+        inStockKg: editStock,
+        isAvailableToday: editAvailable,
+        organicCertified: editOrganic,
+      });
+      setProduceList(getProduceCatalog());
+      showToast(`Updated "${editName}" details & stock!`);
+      setEditingProduct(null);
+    } catch (err: any) {
+      showToast(`Error saving product: ${err?.message || 'Failed'}`);
+    } finally {
+      setIsSavingProduct(false);
+    }
   };
 
   useEffect(() => {
@@ -312,6 +436,18 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ user, onGoToShop
         >
           <Bike className="w-3.5 h-3.5" />
           <span>Fleet &amp; Live Map</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('users')}
+          className={`px-4 py-2 text-xs font-bold rounded-xl flex items-center gap-2 cursor-pointer transition-colors whitespace-nowrap ${
+            activeTab === 'users'
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <Users className="w-3.5 h-3.5" />
+          <span>User Access &amp; RBAC</span>
         </button>
 
         <button
@@ -552,13 +688,22 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ user, onGoToShop
 
                         {/* Action buttons */}
                         <td className="py-3 px-4 text-right">
-                          <button
-                            onClick={() => handleDeleteItem(item.id, item.name)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors"
-                            title="Delete item from market"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => handleStartEditProduct(item)}
+                              className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg cursor-pointer transition-colors"
+                              title="Edit product details, price & stock"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteItem(item.id, item.name)}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors"
+                              title="Delete item from market"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -573,64 +718,112 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ user, onGoToShop
       {/* TAB 2: LIVE ORDERS */}
       {activeTab === 'orders' && (
         <div className="space-y-4">
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex items-center justify-between">
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h2 className="text-base font-bold text-slate-900">Active Express Orders &amp; Dispatch</h2>
-              <p className="text-xs text-slate-500">Live 30-minute packing, delivery status, and partner reassignment</p>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-slate-900">Active Express Orders &amp; Dispatch</h2>
+                <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  Live Dispatch
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Real-time tracking of active orders. Manually assign Pending orders to available delivery partners.
+              </p>
             </div>
-            <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
-              ⚡ 100% On-Time Target
-            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={fetchLiveOrders}
+                disabled={isLoadingOrders}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer transition-colors"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoadingOrders ? 'animate-spin' : ''}`} />
+                <span>Refresh Orders</span>
+              </button>
+              <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200">
+                ⚡ 100% On-Time Target
+              </span>
+            </div>
           </div>
 
           <div className="space-y-3">
-            {orders.map((ord) => (
-              <div
-                key={ord.id}
-                className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-              >
-                <div className="space-y-1.5 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono font-bold text-xs text-slate-900">{ord.id}</span>
-                    <span className="text-xs text-slate-400">·</span>
-                    <span className="text-xs font-semibold text-slate-700">{ord.customerName}</span>
-                    <span className="text-xs text-slate-400">·</span>
-                    <span className="text-[11px] text-slate-500">{ord.formattedDate}</span>
-                    <span className="text-xs text-slate-400">·</span>
-                    <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                      OTP: {ord.deliveryOtp || '4829'}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-600 font-medium">{ord.itemsSummary}</p>
-                  <div className="text-[11px] text-slate-400">
-                    {ord.address} · <span className="font-bold text-slate-700">₹{ord.amount}</span> ({ord.paymentMethod})
-                  </div>
-                </div>
-
-                <div className="flex flex-col sm:flex-row sm:items-center gap-3 self-end sm:self-auto">
-                  {/* Rider Assignment & Reassign Selector */}
-                  <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 text-xs">
-                    <Bike className="w-3.5 h-3.5 text-emerald-600" />
-                    <span className="text-[11px] text-slate-500 font-medium">Rider:</span>
-                    <select
-                      value={ord.driverName || 'Arjun S.'}
-                      onChange={(e) => handleReassignDriver(ord.id, e.target.value)}
-                      className="bg-transparent font-bold text-slate-800 text-xs outline-none cursor-pointer"
-                      title="Reassign express delivery partner"
-                    >
-                      <option value="Arjun S.">Arjun S. (Indiranagar)</option>
-                      <option value="Farah Khan">Farah Khan (Koramangala)</option>
-                      <option value="Vishal Patel">Vishal Patel (HSR)</option>
-                      <option value="Sunil Reddy">Sunil Reddy (Whitefield)</option>
-                    </select>
-                  </div>
-
-                  <span className="px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    {ord.status === 'delivered' ? 'Delivered ✓' : `Out for Delivery (${ord.promiseMinutes}m)`}
-                  </span>
-                </div>
+            {orders.length === 0 ? (
+              <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center text-slate-400 text-xs">
+                No orders placed yet today.
               </div>
-            ))}
+            ) : (
+              orders.map((ord) => {
+                const isPending = ord.status === 'pending' || !ord.driverId || ord.driverName === 'Unassigned';
+
+                return (
+                  <div
+                    key={ord.id}
+                    className={`bg-white border rounded-2xl p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all ${
+                      isPending ? 'border-amber-300 ring-2 ring-amber-100 bg-amber-50/20' : 'border-slate-200'
+                    }`}
+                  >
+                    <div className="space-y-1.5 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono font-bold text-xs text-slate-900">{ord.id}</span>
+                        <span className="text-xs text-slate-400">·</span>
+                        <span className="text-xs font-semibold text-slate-700">{ord.customerName}</span>
+                        <span className="text-xs text-slate-400">·</span>
+                        <span className="text-[11px] text-slate-500">{ord.formattedDate}</span>
+                        <span className="text-xs text-slate-400">·</span>
+                        <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                          OTP: {ord.deliveryOtp || '4829'}
+                        </span>
+                        {isPending && (
+                          <span className="text-[11px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded border border-amber-300 animate-pulse flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3 text-amber-600" />
+                            <span>Pending Assignment</span>
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-600 font-medium">{ord.itemsSummary}</p>
+                      <div className="text-[11px] text-slate-400">
+                        {ord.address} · <span className="font-bold text-slate-700">₹{ord.amount}</span> ({ord.paymentMethod})
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3 self-end sm:self-auto">
+                      {/* Rider Assignment & Reassign Selector */}
+                      <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 text-xs">
+                        <Bike className="w-3.5 h-3.5 text-emerald-600" />
+                        <span className="text-[11px] text-slate-500 font-medium">Assign Partner:</span>
+                        <select
+                          value={ord.driverName && ord.driverName !== 'Unassigned' ? ord.driverName : ''}
+                          onChange={(e) => handleReassignDriver(ord.id, e.target.value)}
+                          className="bg-transparent font-bold text-slate-800 text-xs outline-none cursor-pointer"
+                          title="Assign or reassign delivery partner"
+                        >
+                          <option value="" disabled>-- Select Driver --</option>
+                          <option value="Arjun S.">Arjun S. (Tadepalligudem East)</option>
+                          <option value="Kiran R.">Kiran R. (Tadepalligudem Town)</option>
+                          <option value="Suresh P.">Suresh P. (Pentapadu Hub)</option>
+                        </select>
+                      </div>
+
+                      <span
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${
+                          ord.status === 'delivered'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : isPending
+                            ? 'bg-amber-100 text-amber-800 border-amber-300'
+                            : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        }`}
+                      >
+                        {ord.status === 'delivered'
+                          ? 'Delivered ✓'
+                          : isPending
+                          ? 'Pending Partner'
+                          : `Out for Delivery (${ord.promiseMinutes}m)`}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
       )}
@@ -639,6 +832,9 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ user, onGoToShop
       {activeTab === 'drivers' && (
         <AdminFleetView orders={orders} onReassignDriver={handleReassignDriver} />
       )}
+
+      {/* TAB: USER ACCESS & RBAC MANAGEMENT */}
+      {activeTab === 'users' && <AdminUsersView />}
 
       {/* TAB 4: DISPATCH & FULFILLMENT ANALYTICS */}
       {activeTab === 'analytics' && <AdminAnalyticsView />}
@@ -916,6 +1112,117 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ user, onGoToShop
                   className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer"
                 >
                   Add to Today's Market
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: EDIT PRODUCE DETAILS & STOCK (PUT /api/admin/products/:id) */}
+      {editingProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="relative w-full max-w-lg bg-white border border-slate-200 rounded-3xl p-6 sm:p-7 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/60">
+                  Product Management
+                </span>
+                <h3 className="text-lg font-bold text-slate-900 mt-1">
+                  Edit Produce Details
+                </h3>
+              </div>
+              <button
+                onClick={() => setEditingProduct(null)}
+                className="w-8 h-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-800 hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditProduct} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-slate-800 mb-1">Produce Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 text-slate-900 font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">Price per {editingProduct.unit} (₹) *</label>
+                  <input
+                    type="number"
+                    min={1}
+                    required
+                    value={editPrice}
+                    onChange={(e) => setEditPrice(Number(e.target.value))}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 text-slate-900 font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">In Stock ({editingProduct.unit}) *</label>
+                  <input
+                    type="number"
+                    min={0}
+                    required
+                    value={editStock}
+                    onChange={(e) => setEditStock(Number(e.target.value))}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 text-slate-900 font-bold"
+                  />
+                </div>
+              </div>
+
+              {/* Toggles */}
+              <div className="space-y-2 pt-2 border-t border-slate-100">
+                <label className="flex items-center gap-3 p-2.5 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editAvailable}
+                    onChange={(e) => setEditAvailable(e.target.checked)}
+                    className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
+                  />
+                  <div>
+                    <span className="font-bold text-slate-800 block">Available for Ordering Today</span>
+                    <span className="text-[11px] text-slate-500">Uncheck to mark item as sold out or unavailable today</span>
+                  </div>
+                </label>
+
+                <label className="flex items-center gap-3 p-2.5 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editOrganic}
+                    onChange={(e) => setEditOrganic(e.target.checked)}
+                    className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
+                  />
+                  <div>
+                    <span className="font-bold text-slate-800 block">Certified Organic Produce</span>
+                    <span className="text-[11px] text-slate-500">Displays verified organic badge on customer storefront</span>
+                  </div>
+                </label>
+              </div>
+
+              {/* Buttons */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingProduct(null)}
+                  className="px-4 py-2 text-slate-600 hover:text-slate-900 text-xs font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingProduct}
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer flex items-center gap-2 disabled:opacity-50"
+                >
+                  {isSavingProduct && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Save Changes</span>
                 </button>
               </div>
             </form>

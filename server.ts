@@ -206,6 +206,7 @@ export interface ServerUserRecord {
   password?: string;
   role: ServerRole;
   isVerified?: boolean;
+  createdAt?: string;
 }
 
 const serverUsersDatabase: Map<string, ServerUserRecord> = new Map([
@@ -921,6 +922,7 @@ app.patch(["/api/admin/users/:userId/role", "/api/admin/user/:userId/role"], (re
     id: userId,
     name: req.body.name || "User",
     email: req.body.email || `${userId}@freshlane.com`,
+    phone: req.body.phone || "+91 90000 00000",
     role,
     createdAt: new Date().toISOString(),
   };

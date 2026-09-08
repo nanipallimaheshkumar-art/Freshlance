@@ -647,12 +647,20 @@ export default function App() {
         }}
       />
 
-      {/* Checkout Modal with Razorpay */}
+      {/* Checkout Modal with Razorpay & Resend OTP Checkout Guard */}
       <CheckoutModal
         isOpen={isCheckoutOpen}
         onClose={() => setIsCheckoutOpen(false)}
         items={cartItems}
         user={user}
+        onUserLoggedIn={(loggedInUser) => {
+          setUser(loggedInUser);
+          showToast(`Welcome back, ${loggedInUser.name.split(' ')[0]}!`);
+        }}
+        onOrderPlaced={(orderData) => {
+          showToast(`Order #${orderData.id} placed successfully!`);
+          setCartItems([]);
+        }}
         onGoToOrderHistory={() => {
           setIsCheckoutOpen(false);
           setCurrentTab('orders');

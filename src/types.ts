@@ -16,6 +16,8 @@ export interface ProduceItem {
   storageTip: string;
   isAvailableToday?: boolean; // Owner daily availability toggle
   sampleScanImage?: string;
+  pricePerKg?: number;
+  organicCertified?: boolean;
 }
 
 export interface ScanResult {
@@ -46,6 +48,7 @@ export interface CartItem {
 }
 
 export type UserRole = 'admin' | 'delivery_partner' | 'customer' | 'owner' | 'driver' | 'shopper';
+export type AppRole = UserRole;
 
 export interface UserAccount {
   id: string;
@@ -99,7 +102,17 @@ export interface OrderRecord {
   itemCount: number;
   weightKg?: number;
   amount: number;
-  status: 'placed' | 'confirmed' | 'picking' | 'packing' | 'assigned' | 'picked_up' | 'on_route' | 'delivered';
+  status:
+    | 'placed'
+    | 'confirmed'
+    | 'picking'
+    | 'packing'
+    | 'assigned'
+    | 'picked_up'
+    | 'on_route'
+    | 'delivered'
+    | 'pending'
+    | 'out_for_delivery';
   promiseMinutes: number;
   driverId?: string;
   driverName?: string;

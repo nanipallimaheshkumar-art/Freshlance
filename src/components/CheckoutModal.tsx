@@ -25,6 +25,7 @@ import { checkDeliveryEligibility, DeliveryEligibilityResult, TADEPALLIGUDEM_ZON
 import { useFreeDeliveryPromotion } from '../utils/freeDeliveryPromo';
 import { normalizeRole } from '../utils/rbac';
 import { safeResponseJson } from '../utils/safeFetch';
+import { setCurrentSession, authenticateUser } from '../utils/authStore';
 
 function decodeFallback(b64: string): string {
   try {
@@ -47,6 +48,8 @@ interface CheckoutModalProps {
   onOrderPlaced: (orderData: any) => void;
   onGoToOrderHistory?: () => void;
   onTrackOrder?: (orderId: string) => void;
+  onClearCart?: () => void;
+  onUserLoggedIn?: (user: UserAccount) => void;
 }
 
 export const CheckoutModal: React.FC<CheckoutModalProps> = ({
@@ -57,8 +60,18 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   onOrderPlaced,
   onGoToOrderHistory,
   onTrackOrder,
+  onClearCart,
+  onUserLoggedIn,
 }) => {
   if (!isOpen) return null;
+
+  const [currentUser, setCurrentUser] = useState<UserAccount | null>(user);
+  const [authEmail, setAuthEmail] = useState('');
+  const [authOtp, setAuthOtp] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
 
   const [paymentMethod, setPaymentMethod] = useState<'razorpay' | 'upi' | 'cod'>('razorpay');
   const [address, setAddress] = useState(
@@ -94,9 +107,95 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     return localStorage.getItem('freshlane_cloudflare_url') || '';
   });
   const [showSecretKey, setShowSecretKey] = useState(false);
-  const isAdminUser = normalizeRole(user?.role) === 'admin';
+  const isAdminUser = normalizeRole(currentUser?.role) === 'admin';
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
   const [locationSuccessMsg, setLocationSuccessMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    setCurrentUser(user);
+    if (user?.address) {
+      setAddress(user.address);
+      const res = checkDeliveryEligibility({ address: user.address });
+      setRangeStatus(res);
+    }
+    if (user?.phone) {
+      setContactPhone(user.phone);
+    }
+  }, [user]);
+
+  const handleSendCheckoutOtp = async () => {
+    if (!authEmail.trim() || !authEmail.includes('@')) {
+      setAuthError('Please enter a valid email address to receive your OTP.');
+      return;
+    }
+    setAuthError(null);
+    setOtpLoading(true);
+    try {
+      const res = await fetch('/api/auth/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: authEmail.trim() }),
+      });
+      const data = await safeResponseJson<any>(res, { success: false, error: 'Network error' });
+      if (data.success) {
+        setOtpSent(true);
+        setAuthNotice(data.message || `Verification code sent to ${authEmail.trim()}.`);
+        if (data.code) {
+          setAuthOtp(data.code);
+        }
+      } else {
+        setAuthError(data.error || 'Failed to send OTP code.');
+      }
+    } catch {
+      setOtpSent(true);
+      setAuthOtp('123456');
+      setAuthNotice(`Verification code sent to ${authEmail} (Demo code: 123456)`);
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleVerifyCheckoutOtp = async () => {
+    if (!authEmail.trim()) {
+      setAuthError('Please enter your email address.');
+      return;
+    }
+    if (!authOtp.trim()) {
+      setAuthError('Please enter the 6-digit verification code.');
+      return;
+    }
+    setAuthError(null);
+    setOtpLoading(true);
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: authEmail.trim().toLowerCase(),
+          otp: authOtp.trim(),
+          targetPortal: 'customer',
+        }),
+      });
+      const data = await safeResponseJson<any>(res, { success: false, error: 'Login service unavailable' });
+      if (res.ok && data.success && data.user) {
+        setCurrentUser(data.user);
+        setCurrentSession(data.user);
+        onUserLoggedIn?.(data.user);
+        if (data.user.address) {
+          handleAddressChange(data.user.address);
+        }
+        if (data.user.phone) {
+          setContactPhone(data.user.phone);
+        }
+      } else {
+        setAuthError(data.error || 'Invalid verification code. Please check and try again.');
+      }
+    } catch (err: any) {
+      setAuthError(err.message || 'Login request failed.');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
 
   const handleAddressChange = (newAddress: string) => {
     setAddress(newAddress);
@@ -242,24 +341,24 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       paymentMethod: payMethod === 'razorpay' ? 'Razorpay Secure' : payMethod === 'upi' ? 'Direct UPI' : 'Cash on Delivery',
       razorpayPaymentId: rzpPaymentId,
       razorpayOrderId: rzpOrderId,
-      customerName: user?.name || 'Customer',
-      customerEmail: user?.email || 'customer@freshlane.com',
+      customerName: currentUser?.name || 'Customer',
+      customerEmail: currentUser?.email || 'customer@freshlane.com',
     });
 
-    // Sync order to Live Production Database so it immediately dispatches to delivery partners
+    // Sync order to Live Production Database so it immediately dispatches as Pending to admin & partners
     const liveOrderPayload = {
       id: generatedId,
-      customerName: user?.name || 'Customer',
-      customerEmail: user?.email || 'customer@freshlane.com',
-      customerPhone: contactPhone || user?.phone || '+91 98450 67890',
+      customerName: currentUser?.name || 'Customer',
+      customerEmail: currentUser?.email || 'customer@freshlane.com',
+      customerPhone: contactPhone || currentUser?.phone || '+91 98450 67890',
       customerAddress: address,
       customerCoords: rangeStatus?.customerCoords || { lat: 16.8165, lng: 81.5295 },
       items: items.map((i) => `${i.name} (${i.qty} × ${i.unit})`),
       totalAmount: grandTotal,
-      status: 'Out for Delivery',
-      driverId: 'DRV-101',
-      driverName: 'Arjun S.',
-      etaMinutes: 22,
+      status: 'Pending',
+      driverId: null,
+      driverName: 'Unassigned',
+      etaMinutes: 25,
     };
 
     // Post to express backend
@@ -456,6 +555,28 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const handlePlaceOrder = (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!currentUser) {
+      setAuthError('Please enter your email and verify OTP to proceed with order placement.');
+      return;
+    }
+
+    if (!address.trim()) {
+      setPaymentError('Please enter your delivery address in Tadepalligudem.');
+      return;
+    }
+
+    if (!rangeStatus.customerCoords) {
+      setPaymentError('Please verify your GPS coordinates by clicking "Use My Location".');
+      return;
+    }
+
+    if (!rangeStatus.isDeliverable) {
+      setPaymentError(
+        `You are out of delivery range (~${rangeStatus.distanceKm} km away). FreshLane delivers exclusively within a 15 km radius of Tadepalligudem (PIN 534102).`
+      );
+      return;
+    }
+
     if (paymentMethod === 'razorpay') {
       handleRazorpayCheckout();
     } else {
@@ -492,7 +613,105 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handlePlaceOrder} className="space-y-4">
+            {/* GUEST CHECKOUT GUARD: RESEND OTP AUTHENTICATION */}
+            {!currentUser ? (
+              <div className="space-y-4">
+                <div className="text-center py-3 bg-emerald-50/60 border border-emerald-200/70 rounded-2xl p-4">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center mx-auto mb-2.5 shadow-sm">
+                    <ShieldCheck className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-base font-bold text-slate-900">Sign In to Complete Order</h3>
+                  <p className="text-xs text-slate-600 mt-1 max-w-sm mx-auto">
+                    Guests must verify their email with a 6-digit OTP before finalizing express checkout.
+                  </p>
+                </div>
+
+                {authError && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-medium flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
+                    <span className="flex-1">{authError}</span>
+                  </div>
+                )}
+
+                {authNotice && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-medium flex items-start gap-2">
+                    <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 mt-0.5" />
+                    <span className="flex-1">{authNotice}</span>
+                  </div>
+                )}
+
+                <div className="space-y-3 bg-slate-50 border border-slate-200 rounded-2xl p-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1">
+                      Email Address *
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="email"
+                        value={authEmail}
+                        onChange={(e) => setAuthEmail(e.target.value)}
+                        placeholder="your.email@example.com"
+                        className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 outline-none focus:border-emerald-500 font-medium"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSendCheckoutOtp}
+                        disabled={otpLoading || !authEmail.trim()}
+                        className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50 flex items-center gap-1.5 shrink-0 cursor-pointer"
+                      >
+                        {otpLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                        <span>{otpSent ? 'Resend' : 'Send Code'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {otpSent && (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800 mb-1">
+                        Enter 6-Digit Verification Code *
+                      </label>
+                      <input
+                        type="text"
+                        maxLength={6}
+                        value={authOtp}
+                        onChange={(e) => setAuthOtp(e.target.value)}
+                        placeholder="123456"
+                        className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-center tracking-widest font-mono text-base font-bold text-slate-900 outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleVerifyCheckoutOtp}
+                    disabled={otpLoading || !authEmail.trim() || (otpSent && !authOtp.trim())}
+                    className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer flex items-center justify-center gap-2 transition-all disabled:opacity-50 mt-1"
+                  >
+                    {otpLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Lock className="w-3.5 h-3.5" />}
+                    <span>{otpSent ? 'Verify OTP & Continue to Delivery' : 'Get OTP Code to Continue'}</span>
+                  </button>
+                </div>
+
+                {/* Order summary sneak peek */}
+                <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600">
+                  <span>Items: <strong>{items.reduce((s, i) => s + i.qty, 0)}</strong></span>
+                  <span>Cart Total: <strong className="text-slate-900 font-bold">₹{grandTotal}</strong></span>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handlePlaceOrder} className="space-y-4">
+                {/* Verified Customer Status Banner */}
+                <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200/80 rounded-xl px-3 py-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0" />
+                    <span className="text-slate-700">
+                      Signed in as <strong className="text-emerald-950">{currentUser.name}</strong> ({currentUser.email})
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded uppercase">
+                    Customer Verified
+                  </span>
+                </div>
               {/* Delivery Address */}
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2.5">
                 <div className="flex items-center justify-between gap-2">
@@ -942,8 +1161,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 )}
               </button>
             </form>
-          </>
-        ) : (
+          )}
+        </>
+      ) : (
           /* Order Confirmed Screen */
           <div className="text-center py-6 space-y-4">
             <div className="w-16 h-16 rounded-full bg-emerald-600 text-white flex items-center justify-center mx-auto text-2xl shadow-md">
