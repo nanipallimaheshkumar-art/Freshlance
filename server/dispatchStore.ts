@@ -92,7 +92,6 @@ const driversDatabase: Map<string, DriverEntity> = new Map([
         heading: 110,
         speed: 24,
       },
-      activeOrderId: "FL-91428",
       lastPingTime: Date.now(),
     },
   ],
@@ -170,71 +169,8 @@ const driversDatabase: Map<string, DriverEntity> = new Map([
   ],
 ]);
 
-// Initial Orders Live Tracking Cache
-const orderTrackingDatabase: Map<string, OrderTrackingSnapshot> = new Map([
-  [
-    "FL-91428",
-    {
-      orderId: "FL-91428",
-      status: "on_the_way",
-      etaMinutes: 8,
-      distanceMeters: 850,
-      driver: {
-        id: "DRV-101",
-        name: "Arjun S.",
-        phone: "+91 98450 12345",
-        vehicle: "EV Scooter (AP-39-EQ-4421)",
-        rating: 4.95,
-        batteryLevel: 82,
-        coords: {
-          lat: 16.8145,
-          lng: 81.5285,
-          heading: 110,
-          speed: 24,
-        },
-      },
-      customerAddress: "Flat 204, Sri Rama Residency, KN Road, Tadepalligudem, 534102",
-      customerCoords: {
-        lat: 16.8165,
-        lng: 81.5295,
-      },
-      storeCoords: FRESHLANE_HUB_COORDS,
-      geofenceArrived: false,
-      deliveryOtp: "4829",
-      timeline: [
-        {
-          step: "placed",
-          label: "Order Placed & Paid",
-          time: "18 min ago",
-          completed: true,
-        },
-        {
-          step: "confirmed",
-          label: "Hub Confirmed & Packed",
-          time: "14 min ago",
-          completed: true,
-        },
-        {
-          step: "picked_up",
-          label: "Picked Up by Arjun S.",
-          time: "9 min ago",
-          completed: true,
-        },
-        {
-          step: "on_the_way",
-          label: "On the Way",
-          time: "4 min ago",
-          completed: true,
-        },
-        {
-          step: "delivered",
-          label: "Delivered to Doorstep",
-          completed: false,
-        },
-      ],
-    },
-  ],
-]);
+// Live Orders Live Tracking Cache (populated dynamically by active orders)
+const orderTrackingDatabase: Map<string, OrderTrackingSnapshot> = new Map();
 
 // Active SSE Connections by orderId
 const sseConnections: Map<string, Set<Response>> = new Map();

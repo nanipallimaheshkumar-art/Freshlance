@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { safeResponseJson } from '../utils/safeFetch';
 import {
   TrendingUp,
   Clock,
@@ -29,13 +30,15 @@ export const AdminAnalyticsView: React.FC = () => {
 
   useEffect(() => {
     fetch('/api/admin/analytics')
-      .then((res) => res.json())
+      .then((res) => (res.ok ? safeResponseJson(res, null) : null))
       .then((data) => {
         if (data && data.ordersToday) {
           setMetrics(data);
         }
       })
-      .catch(console.error);
+      .catch((err) => {
+        console.warn('Analytics sync notice:', err?.message || err);
+      });
   }, []);
 
   const hourlyOrderTraffic = [

@@ -72,78 +72,7 @@ export interface ServerOrderEntity {
   deliveredDistanceMeters?: number;
 }
 
-const serverOrdersDatabase: Map<string, ServerOrderEntity> = new Map([
-  [
-    "FL-91428",
-    {
-      id: "FL-91428",
-      customerName: "Mahesh Kumar",
-      customerPhone: "+91 98450 67890",
-      customerAddress: "Flat 204, Sri Rama Residency, KN Road, Tadepalligudem, 534102",
-      customerCoords: { lat: 16.8165, lng: 81.5295 },
-      items: ["Alphonso Mangoes (2 kg)", "Kashmir Crisp Apples (1 kg)", "Organic Baby Spinach (250g)"],
-      totalAmount: 540,
-      status: "Out for Delivery",
-      driverId: "DRV-101",
-      driverName: "Arjun S.",
-      etaMinutes: 8,
-      createdAt: new Date(Date.now() - 25 * 60 * 1000).toISOString(),
-    },
-  ],
-  [
-    "FL-91429",
-    {
-      id: "FL-91429",
-      customerName: "Priya Sharma",
-      customerPhone: "+91 99123 45678",
-      customerAddress: "Door 4-12, Subba Rao Peta, Near Clock Tower, Tadepalligudem, 534101",
-      customerCoords: { lat: 16.8142, lng: 81.5312 },
-      items: ["Fresh Tender Coconut (2 pcs)", "Robusta Bananas (1 dozen)"],
-      totalAmount: 220,
-      status: "Out for Delivery",
-      driverId: "DRV-101",
-      driverName: "Arjun S.",
-      etaMinutes: 18,
-      createdAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-    },
-  ],
-  [
-    "FL-91430",
-    {
-      id: "FL-91430",
-      customerName: "Venkat Rao",
-      customerPhone: "+91 98765 43210",
-      customerAddress: "Plot 88, Pentapadu Road, Tadepalligudem, 534102",
-      customerCoords: { lat: 16.8250, lng: 81.5410 },
-      items: ["Seedless Green Grapes (1 kg)", "Fresh Mosambi Sweet Lime (2 kg)"],
-      totalAmount: 380,
-      status: "Preparing",
-      driverId: "DRV-101",
-      driverName: "Arjun S.",
-      etaMinutes: 28,
-      createdAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
-    },
-  ],
-  [
-    "FL-88210",
-    {
-      id: "FL-88210",
-      customerName: "Lakshmi Narayana",
-      customerPhone: "+91 94401 22334",
-      customerAddress: "House 12-5, Police Station Road, Tadepalligudem, 534102",
-      customerCoords: { lat: 16.8120, lng: 81.5260 },
-      items: ["Organic Pomegranate (1 kg)", "Papaya Hybrid (1 pc)"],
-      totalAmount: 310,
-      status: "Delivered",
-      driverId: "DRV-101",
-      driverName: "Arjun S.",
-      etaMinutes: 0,
-      createdAt: new Date(Date.now() - 90 * 60 * 1000).toISOString(),
-      deliveredAt: new Date(Date.now() - 40 * 60 * 1000).toISOString(),
-      deliveredDistanceMeters: 42,
-    },
-  ],
-]);
+const serverOrdersDatabase: Map<string, ServerOrderEntity> = new Map();
 
 // Body parser for JSON with support for base64 images up to 20MB
 app.use(express.json({ limit: "20mb" }));
@@ -222,7 +151,7 @@ app.get("/api/health", (_req, res) => {
 // ---------------------------------------------------------------------------
 export type ServerRole = "admin" | "delivery_partner" | "customer";
 
-function extractServerSession(req: express.Request): { role: ServerRole; email?: string; name?: string } | null {
+function extractServerSession(req: express.Request): { role: ServerRole; email?: string; name?: string; userId?: string } | null {
   const authHeader = req.headers.authorization || req.headers.Authorization;
   const xToken = req.headers["x-session-token"] || req.headers["X-Session-Token"];
   const queryToken = req.query.token as string | undefined;
@@ -240,31 +169,21 @@ function extractServerSession(req: express.Request): { role: ServerRole; email?:
 
   if (!raw) return null;
 
-  const lower = raw.toLowerCase();
-  if (lower === "admin" || lower.includes("role=admin")) {
-    return { role: "admin", email: "nanipallimaheshkumar@gmail.com", name: "Admin" };
-  }
-  if (lower === "delivery_partner" || lower === "driver" || lower.includes("role=delivery_partner")) {
-    return { role: "delivery_partner", email: "arjun@freshlane.com", name: "Arjun S." };
-  }
-  if (lower === "customer" || lower === "shopper" || lower.includes("role=customer")) {
-    return { role: "customer", email: "riya@example.com", name: "Riya Sharma" };
-  }
-
   try {
     const jsonStr = Buffer.from(raw, "base64").toString("utf-8");
     const parsed = JSON.parse(jsonStr);
     if (parsed && typeof parsed === "object") {
+      if (parsed.exp && typeof parsed.exp === "number" && parsed.exp * 1000 < Date.now()) {
+        return null; // Expired session
+      }
       const r = String(parsed.role || "").toLowerCase().trim();
       let role: ServerRole = "customer";
-      if (r === "admin" || r === "owner") role = "admin";
-      else if (r === "delivery_partner" || r === "driver") role = "delivery_partner";
-      return { role, email: parsed.email, name: parsed.name };
+      if (r === "admin" || r === "owner" || r === "administrator") role = "admin";
+      else if (r === "delivery_partner" || r === "driver" || r === "courier") role = "delivery_partner";
+      return { role, email: parsed.email, name: parsed.name, userId: parsed.userId || parsed.id };
     }
   } catch {
-    if (raw.includes("admin")) return { role: "admin" };
-    if (raw.includes("delivery") || raw.includes("driver")) return { role: "delivery_partner" };
-    if (raw.includes("customer")) return { role: "customer" };
+    return null;
   }
 
   return null;
@@ -325,7 +244,7 @@ const serverUsersDatabase: Map<string, ServerUserRecord> = new Map([
 const serverOtpDatabase: Map<string, { code: string; expiresAt: number }> = new Map();
 
 // Generate & Send 6-digit OTP
-app.post("/api/auth/send-otp", (req, res) => {
+app.post("/api/auth/send-otp", async (req, res) => {
   const { email } = req.body || {};
   if (!email || typeof email !== "string") {
     return res.status(400).json({ success: false, error: "Email address is required." });
@@ -336,12 +255,37 @@ app.post("/api/auth/send-otp", (req, res) => {
   const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
 
   serverOtpDatabase.set(cleanEmail, { code, expiresAt });
-  console.log(`[AUTH] Generated OTP for ${cleanEmail}: ${code}`);
+  console.log(`[AUTH] Generated Live OTP for ${cleanEmail}`);
+
+  // If Resend API key is configured, send the code directly to customer's email inbox
+  if (process.env.RESEND_API_KEY) {
+    try {
+      await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: "FreshLane Auth <onboarding@resend.dev>",
+          to: [cleanEmail],
+          subject: "Your FreshLane Verification Code",
+          html: `<div style="font-family:sans-serif;padding:20px;border:1px solid #e2e8f0;border-radius:12px;">
+            <h2 style="color:#059669;">FreshLane Login Verification</h2>
+            <p>Your one-time login verification code is:</p>
+            <div style="font-size:32px;font-weight:bold;letter-spacing:6px;color:#0f172a;background:#f1f5f9;padding:16px;text-align:center;border-radius:8px;margin:16px 0;">${code}</div>
+            <p style="color:#64748b;font-size:12px;">This code is valid for 10 minutes. For your security, never share this code with anyone.</p>
+          </div>`,
+        }),
+      });
+    } catch (mailErr) {
+      console.warn("Failed to dispatch Resend OTP email:", mailErr);
+    }
+  }
 
   return res.json({
     success: true,
-    message: `Verification code sent to ${cleanEmail}. (Code: ${code} for testing)`,
-    code, // returned for test verification
+    message: `Verification code sent to ${cleanEmail}.`,
     expiresInSeconds: 600,
   });
 });
@@ -371,14 +315,13 @@ app.post("/api/auth/login", (req, res) => {
     });
   }
 
-  // Verify OTP or password
+  // Verify OTP or password strictly
   let isValid = false;
   if (cleanOtp) {
     const stored = serverOtpDatabase.get(cleanEmail);
     if (stored && stored.code === cleanOtp && Date.now() <= stored.expiresAt) {
       isValid = true;
-    } else if (cleanOtp === "123456" || cleanOtp === user.password) {
-      isValid = true;
+      serverOtpDatabase.delete(cleanEmail); // Single-use OTP
     }
   }
 
@@ -392,17 +335,12 @@ app.post("/api/auth/login", (req, res) => {
     return res.status(401).json({
       success: false,
       error: cleanOtp
-        ? "Invalid or expired verification code. Please check the code and try again."
+        ? "Invalid or expired verification code. Please request a new code and try again."
         : "Incorrect password. Please verify and try again.",
     });
   }
 
   // VERIFY ROLE AGAINST TARGET PORTAL
-  // Requirement:
-  // "Only if the user has role === 'admin' can they open /admin.
-  //  Only if the user has role === 'delivery_partner' (or 'admin') can they open /delivery.
-  //  If a standard customer account logs in on these portals, show an error:
-  //  'Access Denied: You do not have permission to access this portal.'"
   if (targetPortal === "admin") {
     if (user.role !== "admin") {
       return res.status(403).json({
@@ -423,13 +361,14 @@ app.post("/api/auth/login", (req, res) => {
     }
   }
 
-  // Generate Base64 Session Token
+  // Generate Base64 Session Token with 7-day expiration
   const tokenPayload = {
     userId: user.id,
     name: user.name,
     email: user.email,
     role: user.role,
     iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + 7 * 86400,
   };
   const token = Buffer.from(JSON.stringify(tokenPayload)).toString("base64");
 
@@ -481,8 +420,8 @@ app.use((req, res, next) => {
   const isAdminEndpoint = p.startsWith("/api/admin") || p === "/api/drivers";
   const isDeliveryEndpoint =
     p.startsWith("/api/delivery") ||
+    p.startsWith("/api/driver") ||
     p.includes("/deliver") ||
-    p === "/api/driver/location" ||
     (p === "/api/orders" && req.method === "GET");
 
   // 2. Delivery Partner: ONLY /api/delivery/* allowed
@@ -749,15 +688,15 @@ app.post("/api/driver/location", (req, res) => {
 });
 
 // 2. Customer App pulls order location snapshot
-app.get("/api/order/:id/location", (req, res) => {
-  const orderId = req.params.id;
+app.get(["/api/order/:id/location", "/api/orders/:id/location", "/api/order/location", "/api/orders/location"], (req, res) => {
+  const orderId = req.params.id || "FL-91428";
   const snapshot = getOrCreateOrderTracking(orderId);
   return res.json(snapshot);
 });
 
 // 3. Real-Time SSE Stream for order location (WebSocket alternative for SSE push)
-app.get("/api/order/:id/stream", (req, res) => {
-  const orderId = req.params.id;
+app.get(["/api/order/:id/stream", "/api/orders/:id/stream", "/api/order/stream", "/api/orders/stream"], (req, res) => {
+  const orderId = req.params.id || "FL-91428";
 
   // Set SSE headers
   res.setHeader("Content-Type", "text/event-stream");
@@ -786,12 +725,78 @@ app.post("/api/driver/status", (req, res) => {
     return res.status(400).json({ error: result.error || "Failed to update order status" });
   }
 
+  // Also sync in-memory serverOrdersDatabase so /api/delivery/orders reflects the change
+  const serverOrder = serverOrdersDatabase.get(orderId);
+  if (serverOrder) {
+    if (status === "picked_up") {
+      serverOrder.status = "Out for Delivery";
+    } else if (status === "on_the_way") {
+      serverOrder.status = "Out for Delivery";
+    } else if (status === "delivered") {
+      serverOrder.status = "Delivered";
+      serverOrder.deliveredAt = new Date().toISOString();
+      serverOrder.etaMinutes = 0;
+    }
+  }
+
   return res.json(result);
 });
 
-// 4a. Orders List for Delivery Portal (GET /api/orders or /api/delivery/orders)
+// 4a. Create / Sync New Live Order (POST /api/orders)
+app.post("/api/orders", (req, res) => {
+  const {
+    id,
+    customerName,
+    customerEmail,
+    customerPhone,
+    customerAddress,
+    customerCoords,
+    items,
+    totalAmount,
+    status = "Out for Delivery",
+    driverId = "DRV-101",
+    driverName = "Arjun S.",
+    etaMinutes = 20,
+  } = req.body || {};
+
+  if (!id) {
+    return res.status(400).json({ error: "Order ID is required" });
+  }
+
+  const orderEntity: ServerOrderEntity = {
+    id,
+    customerName: customerName || "Customer",
+    customerPhone: customerPhone || "+91 98450 67890",
+    customerAddress: customerAddress || "KN Road, Tadepalligudem, 534102",
+    customerCoords: customerCoords || { lat: 16.8165, lng: 81.5295 },
+    items: Array.isArray(items) ? items : ["Fresh Produce Express"],
+    totalAmount: Number(totalAmount) || 250,
+    status: status as any,
+    driverId,
+    driverName,
+    etaMinutes,
+    createdAt: new Date().toISOString(),
+  };
+
+  serverOrdersDatabase.set(id, orderEntity);
+
+  return res.json({
+    success: true,
+    order: orderEntity,
+  });
+});
+
+// 4b. Live Orders List for Delivery Portal (GET /api/orders or /api/delivery/orders)
 app.get(["/api/orders", "/api/delivery/orders"], (req, res) => {
-  const driverId = req.query.driverId as string | undefined;
+  const session = extractServerSession(req);
+  if (!session || (session.role !== "delivery_partner" && session.role !== "admin")) {
+    return res.status(401).json({
+      success: false,
+      error: "Authentication required: A valid session token with delivery partner or admin role is required.",
+    });
+  }
+
+  const driverId = (req.query.driverId as string | undefined) || (session.role === "delivery_partner" ? session.userId : undefined);
   let list = Array.from(serverOrdersDatabase.values());
   if (driverId) {
     list = list.filter((o) => o.driverId === driverId);
@@ -802,8 +807,15 @@ app.get(["/api/orders", "/api/delivery/orders"], (req, res) => {
   });
 });
 
-// 4b. Delivery Driver Mark as Delivered with Geolocation Validation (POST /api/orders/:orderId/deliver or /api/delivery/orders/:orderId/deliver)
-app.post(["/api/orders/:orderId/deliver", "/api/delivery/orders/:orderId/deliver"], (req, res) => {
+// 4c. Delivery Driver Mark as Delivered with Strict Geolocation Validation (POST /api/orders/:orderId/deliver or /api/delivery/orders/:orderId/deliver)
+app.post(["/api/orders/:orderId/deliver", "/api/delivery/orders/:orderId/deliver"], async (req, res) => {
+  const session = extractServerSession(req);
+  if (!session || (session.role !== "delivery_partner" && session.role !== "admin")) {
+    return res.status(401).json({
+      error: "Authentication required: Valid session token with delivery_partner or admin role is required.",
+    });
+  }
+
   const orderId = req.params.orderId;
   const order = serverOrdersDatabase.get(orderId);
   if (!order) {
@@ -828,7 +840,7 @@ app.post(["/api/orders/:orderId/deliver", "/api/delivery/orders/:orderId/deliver
     order.customerCoords
   );
 
-  // Validation rule: Driver must be within 100 meters (0.1 km) of customer delivery address
+  // Strict validation rule: Driver must be within 100 meters (0.1 km) of customer delivery address
   const MAX_ALLOWED_METERS = 100;
 
   if (distanceMeters > MAX_ALLOWED_METERS) {
@@ -847,6 +859,33 @@ app.post(["/api/orders/:orderId/deliver", "/api/delivery/orders/:orderId/deliver
   order.deliveredDistanceMeters = Math.round(distanceMeters);
   order.etaMinutes = 0;
   serverOrdersDatabase.set(orderId, order);
+
+  // Send real production delivery notification email via Resend if configured
+  if (process.env.RESEND_API_KEY) {
+    try {
+      await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: "FreshLane Deliveries <onboarding@resend.dev>",
+          to: ["nanipallimaheshkumar@gmail.com"],
+          subject: `Order #${order.id} Delivered Successfully`,
+          html: `<div style="font-family:sans-serif;padding:20px;border:1px solid #e2e8f0;border-radius:12px;">
+            <h2 style="color:#059669;margin-top:0;">FreshLane Delivery Confirmation</h2>
+            <p>Order <strong>#${order.id}</strong> has been successfully marked as delivered by driver ${order.driverName || "Arjun S."}.</p>
+            <p><strong>Customer:</strong> ${order.customerName}</p>
+            <p><strong>Address:</strong> ${order.customerAddress}</p>
+            <p><strong>Verified GPS Distance:</strong> ${Math.round(distanceMeters)}m from destination.</p>
+          </div>`,
+        }),
+      });
+    } catch (notifyErr) {
+      console.warn("Failed to dispatch Resend delivery alert:", notifyErr);
+    }
+  }
 
   return res.json({
     success: true,
@@ -944,8 +983,8 @@ app.delete("/api/admin/driver/:id", (req, res) => {
 });
 
 // 8. Submit Customer Delivery Rating & Feedback
-app.post("/api/order/:id/rating", (req, res) => {
-  const orderId = req.params.id;
+app.post(["/api/order/:id/rating", "/api/orders/:id/rating", "/api/order/rating", "/api/orders/rating"], (req, res) => {
+  const orderId = req.params.id || req.body?.orderId || "FL-91428";
   const { stars, tags, comment } = req.body;
 
   if (typeof stars !== "number" || stars < 1 || stars > 5) {
@@ -1338,6 +1377,16 @@ app.post("/api/auth/send-sms-otp", async (req, res) => {
 });
 
 async function startServer() {
+  // Catch-all route for any unhandled /api/* requests: ALWAYS return a 404 JSON response.
+  // This guarantees unhandled API routes never fall through to Vite SPA middleware or return HTML.
+  app.use("/api", (req, res) => {
+    return res.status(404).json({
+      error: `API endpoint not found: ${req.method} ${req.originalUrl}`,
+      status: 404,
+      path: req.originalUrl,
+    });
+  });
+
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({

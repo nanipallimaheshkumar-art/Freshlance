@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { registerAccount, generateVerificationCode, verifyCode } from '../utils/authStore';
 import { UserAccount } from '../types';
+import { safeResponseJson } from '../utils/safeFetch';
 
 interface CreateAccountPageProps {
   onRegisterSuccess: (user: UserAccount) => void;
@@ -158,7 +159,7 @@ export const CreateAccountPage: React.FC<CreateAccountPageProps> = ({
         phone: formattedPhone,
       }),
     })
-      .then((res) => res.json())
+      .then((res) => safeResponseJson(res, null))
       .then((data) => {
         setEmailDeliveryInfo({
           checked: true,
@@ -211,7 +212,7 @@ export const CreateAccountPage: React.FC<CreateAccountPageProps> = ({
         phone: formattedPhone,
       }),
     })
-      .then((res) => res.json())
+      .then((res) => safeResponseJson(res, null))
       .then((data) => {
         setEmailDeliveryInfo({
           checked: true,

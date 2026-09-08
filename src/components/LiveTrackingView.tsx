@@ -19,6 +19,7 @@ import {
 import { OrderRecord, OrderLiveTrackingState, DeliveryRating } from '../types';
 import { LiveMap } from './LiveMap';
 import { getUserOrders } from '../utils/orderStore';
+import { safeResponseJson } from '../utils/safeFetch';
 
 interface LiveTrackingViewProps {
   orderId: string;
@@ -70,18 +71,21 @@ export const LiveTrackingView: React.FC<LiveTrackingViewProps> = ({
   useEffect(() => {
     let eventSource: EventSource | null = null;
     let fallbackInterval: NodeJS.Timeout | null = null;
+    const cleanId = (orderId || 'FL-91428').trim();
 
     const fetchSnapshot = async () => {
       try {
-        const res = await fetch(`/api/order/${orderId}/location`);
+        const res = await fetch(`/api/order/${cleanId}/location`);
         if (res.ok) {
-          const data = await res.json();
-          setTrackingData(data);
-          setIsConnected(true);
-          setIsLoading(false);
+          const data = await safeResponseJson(res, null);
+          if (data) {
+            setTrackingData(data);
+            setIsConnected(true);
+            setIsLoading(false);
+          }
         }
       } catch (err) {
-        console.error('Failed to fetch order tracking snapshot:', err);
+        console.warn('Order tracking snapshot notice:', err);
       }
     };
 
@@ -89,7 +93,7 @@ export const LiveTrackingView: React.FC<LiveTrackingViewProps> = ({
 
     // Setup Server-Sent Events for real-time live location push
     try {
-      eventSource = new EventSource(`/api/order/${orderId}/stream`);
+      eventSource = new EventSource(`/api/order/${cleanId}/stream`);
 
       eventSource.onopen = () => {
         setIsConnected(true);
@@ -97,17 +101,19 @@ export const LiveTrackingView: React.FC<LiveTrackingViewProps> = ({
 
       eventSource.onmessage = (event) => {
         try {
-          const parsed = JSON.parse(event.data);
-          setTrackingData(parsed);
-          setIsConnected(true);
-          setIsLoading(false);
+          if (event.data && typeof event.data === 'string' && event.data.trim().startsWith('{')) {
+            const parsed = JSON.parse(event.data);
+            setTrackingData(parsed);
+            setIsConnected(true);
+            setIsLoading(false);
 
-          // Auto-prompt rating when status switches to delivered
-          if (parsed.status === 'delivered' && !ratingSubmitted) {
-            setShowRatingModal(true);
+            // Auto-prompt rating when status switches to delivered
+            if (parsed.status === 'delivered' && !ratingSubmitted) {
+              setShowRatingModal(true);
+            }
           }
         } catch (e) {
-          console.error('SSE JSON parse error:', e);
+          console.warn('SSE payload warning:', e);
         }
       };
 
@@ -141,8 +147,9 @@ export const LiveTrackingView: React.FC<LiveTrackingViewProps> = ({
 
   const handleRatingSubmit = async () => {
     setIsSubmittingRating(true);
+    const cleanId = (orderId || 'FL-91428').trim();
     try {
-      const res = await fetch(`/api/order/${orderId}/rating`, {
+      const res = await fetch(`/api/order/${cleanId}/rating`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

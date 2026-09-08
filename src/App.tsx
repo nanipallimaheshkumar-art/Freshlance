@@ -371,6 +371,7 @@ export default function App() {
           </div>
         )}
         <DeliveryPortal
+          user={user}
           onBackToShop={() => {
             if (role === 'delivery_partner') {
               showToast('Delivery partners can ONLY access the /delivery portal.');

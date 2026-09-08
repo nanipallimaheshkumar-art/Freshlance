@@ -20,6 +20,9 @@ import { calculateHaversineDistanceMeters, formatDistanceDisplay } from '../util
 import { getSessionToken, getCurrentSession } from '../utils/authStore';
 import { normalizeRole } from '../utils/rbac';
 import { MarkAsDeliveredButton, LoadingStage } from './MarkAsDeliveredButton';
+import { DriverApp } from './DriverApp';
+import { UserAccount } from '../types';
+import { safeResponseJson } from '../utils/safeFetch';
 
 export interface DeliveryOrder {
   id: string;
@@ -40,13 +43,16 @@ export interface DeliveryOrder {
 }
 
 interface DeliveryPortalProps {
+  user?: UserAccount | null;
   onBackToShop?: () => void;
 }
 
-export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({ onBackToShop }) => {
+export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({ user, onBackToShop }) => {
   const [orders, setOrders] = useState<DeliveryOrder[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [portalView, setPortalView] = useState<'live_console' | 'orders_list'>('live_console');
+  const [selectedLiveOrderId, setSelectedLiveOrderId] = useState<string | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [loadingStage, setLoadingStage] = useState<LoadingStage>('idle');
   const [successOrderId, setSuccessOrderId] = useState<string | null>(null);
@@ -63,7 +69,7 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({ onBackToShop }) 
   } | null>(null);
 
   // Customer tracking query tester
-  const [lookupOrderId, setLookupOrderId] = useState<string>('FL-91428');
+  const [lookupOrderId, setLookupOrderId] = useState<string>('');
   const [lookupResult, setLookupResult] = useState<any>(null);
   const [lookupLoading, setLookupLoading] = useState<boolean>(false);
   const [lookupError, setLookupError] = useState<string | null>(null);
@@ -89,8 +95,8 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({ onBackToShop }) 
 
       const res = await fetch(endpoint, { headers });
       if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data.orders)) {
+        const data = await safeResponseJson(res, { orders: [] });
+        if (Array.isArray(data?.orders)) {
           // Normalize id/orderId
           const mapped = data.orders.map((o: any) => ({
             ...o,
@@ -98,6 +104,10 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({ onBackToShop }) 
             orderId: o.id || o.orderId,
           }));
           setOrders(mapped);
+          if (mapped.length > 0) {
+            setSelectedLiveOrderId((prev) => prev || mapped[0].id);
+            setLookupOrderId((prev) => prev || mapped[0].id);
+          }
         }
       }
     } catch (err) {
@@ -134,28 +144,16 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({ onBackToShop }) 
   }, []);
 
   /**
-   * Feature 1: Mark as Delivered using HTML5 Geolocation API
-   * Captures navigator.geolocation.getCurrentPosition and POSTs to /api/orders/:orderId/deliver
+   * Mark as Delivered using HTML5 Geolocation API
+   * Captures live navigator.geolocation.getCurrentPosition and POSTs to /api/delivery/orders/:orderId/deliver
    */
-  const handleMarkAsDelivered = (order: DeliveryOrder, simulatedCoords?: { lat: number; lng: number }) => {
+  const handleMarkAsDelivered = (order: DeliveryOrder) => {
     const targetOrderId = order.id || order.orderId || '';
     setActionLoadingId(targetOrderId);
     setLoadingStage('gps');
     setErrorOrderId(null);
     setSuccessOrderId(null);
     setGeoStatus(null);
-
-    // If simulated coordinates provided for demonstration/testing
-    if (simulatedCoords) {
-      setTimeout(() => {
-        setLoadingStage('measuring');
-        setTimeout(() => {
-          setLoadingStage('verifying');
-          submitDeliveryCoords(targetOrderId, simulatedCoords.lat, simulatedCoords.lng);
-        }, 350);
-      }, 350);
-      return;
-    }
 
     if (!('geolocation' in navigator)) {
       setActionLoadingId(null);
@@ -169,7 +167,7 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({ onBackToShop }) 
       return;
     }
 
-    // Capture driver's current coordinates using HTML5 Geolocation API
+    // Capture driver's current live coordinates using HTML5 Geolocation API
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const lat = position.coords.latitude;
@@ -187,11 +185,11 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({ onBackToShop }) 
         setErrorOrderId(targetOrderId);
         let errorMsg = 'Could not retrieve GPS coordinates.';
         if (error.code === error.PERMISSION_DENIED) {
-          errorMsg = 'Location permission was denied. Please allow GPS access or use the simulation test button below.';
+          errorMsg = 'Location permission was denied. Please allow GPS access on your device to verify doorstep proximity.';
         } else if (error.code === error.POSITION_UNAVAILABLE) {
-          errorMsg = 'GPS signal is currently unavailable. Please verify GPS is enabled on your device.';
+          errorMsg = 'GPS signal is currently unavailable. Please verify GPS location services are turned on.';
         } else if (error.code === error.TIMEOUT) {
-          errorMsg = 'GPS request timed out. Retrying with device sensor...';
+          errorMsg = 'GPS request timed out. Please ensure clear line-of-sight and tap retry.';
         }
         setGeoStatus({
           orderId: targetOrderId,
@@ -228,7 +226,7 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({ onBackToShop }) 
         body: JSON.stringify({ latitude, longitude }),
       });
 
-      const data = await res.json();
+      const data: any = await safeResponseJson(res, { error: 'Unknown server response' });
 
       if (res.status === 403) {
         // Feature 3: 403 Forbidden when > 100 meters
@@ -327,10 +325,10 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({ onBackToShop }) 
       const endpoint = cfUrl ? `${cfUrl}/api/orders/${cleanId}` : `/api/orders/${cleanId}`;
 
       const res = await fetch(endpoint);
-      const data = await res.json();
+      const data = await safeResponseJson(res, null);
 
-      if (!res.ok) {
-        setLookupError(data.error || `Order ${cleanId} not found (HTTP ${res.status})`);
+      if (!res.ok || !data) {
+        setLookupError(data?.error || `Order ${cleanId} not found (HTTP ${res.status})`);
       } else {
         setLookupResult(data);
       }
@@ -408,8 +406,61 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({ onBackToShop }) 
         </div>
       </header>
 
+      {/* View Switcher Sub-header */}
+      <div className="bg-slate-900/95 border-b border-slate-800 px-4 py-2.5 sticky top-[61px] z-20 backdrop-blur-md shadow-xs">
+        <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
+          <div className="flex items-center gap-1.5 bg-slate-950/80 p-1 rounded-2xl border border-slate-800">
+            <button
+              onClick={() => setPortalView('live_console')}
+              className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all cursor-pointer ${
+                portalView === 'live_console'
+                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-900/40'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/80'
+              }`}
+            >
+              <Navigation className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Live GPS Driver Console &amp; Map</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            </button>
+
+            <button
+              onClick={() => setPortalView('orders_list')}
+              className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all cursor-pointer ${
+                portalView === 'orders_list'
+                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-900/40'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/80'
+              }`}
+            >
+              <Package className="w-3.5 h-3.5 text-emerald-400" />
+              <span>All Deliveries Queue</span>
+              <span className="bg-slate-800 text-slate-300 text-[10px] px-1.5 py-0.2 rounded-full font-mono border border-slate-700">
+                {orders.length}
+              </span>
+            </button>
+          </div>
+
+          <div className="hidden sm:flex items-center gap-2 text-xs font-medium text-slate-400">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Tadepalligudem 15km Zone</span>
+          </div>
+        </div>
+      </div>
+
       {/* Main Container */}
       <main className="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-6 space-y-8">
+        {portalView === 'live_console' ? (
+          <div className="space-y-4">
+            <DriverApp
+              user={user}
+              onGoToShop={onBackToShop}
+              orders={orders}
+              activeOrderId={selectedLiveOrderId}
+              onSelectOrder={(id) => setSelectedLiveOrderId(id)}
+              onViewAllOrders={() => setPortalView('orders_list')}
+            />
+          </div>
+        ) : (
+          <div className="space-y-8">
         
         {/* Verification Rule Callout */}
         <div className="bg-gradient-to-r from-emerald-950/70 via-slate-800 to-slate-800/90 border border-emerald-500/30 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -451,10 +502,13 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({ onBackToShop }) 
               <p className="text-sm text-slate-300 font-medium">Fetching assigned orders from API...</p>
             </div>
           ) : orders.length === 0 ? (
-            <div className="bg-slate-800/60 rounded-2xl p-10 text-center border border-slate-800">
+            <div className="bg-slate-800/60 rounded-2xl p-10 text-center border border-slate-700/60 shadow-inner">
               <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-2 opacity-80" />
-              <h3 className="text-sm font-semibold text-white">No pending deliveries</h3>
-              <p className="text-xs text-slate-400 mt-1">All assigned orders have been completed or none assigned.</p>
+              <h3 className="text-base font-bold text-white">Live Production Mode Active</h3>
+              <p className="text-xs text-slate-300 mt-1 max-w-md mx-auto">
+                No active orders are currently assigned to your driver ID ({user?.id || 'DRV-101'}).
+                When live customers in Tadepalligudem place orders on the FreshLane store, they will automatically appear here for dispatch and live doorstep delivery.
+              </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
@@ -610,6 +664,21 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({ onBackToShop }) 
                         </div>
                       )}
 
+                      {/* Action: Open in Live GPS Driver Console */}
+                      {!isDelivered && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedLiveOrderId(order.id || order.orderId);
+                            setPortalView('live_console');
+                          }}
+                          className="w-full py-2.5 px-3 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 rounded-xl text-xs font-black flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-xs"
+                        >
+                          <Navigation className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Start Route on Live GPS Map 🛵</span>
+                        </button>
+                      )}
+
                       {/* Action Button: Mark as Delivered with Animated Loading & Celebration Success States */}
                       <MarkAsDeliveredButton
                         order={order}
@@ -621,19 +690,7 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({ onBackToShop }) 
                         errorMessage={orderFeedback?.type === 'error' ? orderFeedback.message : undefined}
                         errorDistance={orderFeedback?.type === 'error' ? orderFeedback.distanceMeters : undefined}
                         shakeTrigger={errorOrderId === (order.id || order.orderId) ? errorShakeTrigger : 0}
-                        onMarkDelivered={(simCoords) => handleMarkAsDelivered(order, simCoords)}
-                        onResetOrder={() => {
-                          setOrders((prev) =>
-                            prev.map((o) =>
-                              (o.id || o.orderId) === (order.id || order.orderId)
-                                ? { ...o, status: 'Out for Delivery', deliveredAt: undefined, deliveredDistanceMeters: undefined }
-                                : o
-                            )
-                          );
-                          setGeoStatus(null);
-                          setSuccessOrderId(null);
-                          setErrorOrderId(null);
-                        }}
+                        onMarkDelivered={() => handleMarkAsDelivered(order)}
                         isDelivered={isDelivered}
                       />
                     </div>
@@ -754,6 +811,8 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({ onBackToShop }) 
             </div>
           )}
         </section>
+      </div>
+    )}
 
       </main>
     </div>

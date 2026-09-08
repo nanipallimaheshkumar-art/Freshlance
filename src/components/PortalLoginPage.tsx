@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Shield, Bike, Lock, Mail, KeyRound, ArrowRight, ArrowLeft, CheckCircle2, AlertCircle, Sparkles, UserCheck } from 'lucide-react';
+import { Shield, Bike, Lock, Mail, KeyRound, ArrowRight, ArrowLeft, CheckCircle2, AlertCircle, Sparkles } from 'lucide-react';
 import { UserAccount } from '../types';
 import { setCurrentSession } from '../utils/authStore';
 import { normalizeRole } from '../utils/rbac';
+import { safeResponseJson } from '../utils/safeFetch';
 
 interface PortalLoginPageProps {
   portalType: 'admin' | 'delivery';
@@ -44,7 +45,7 @@ export const PortalLoginPage: React.FC<PortalLoginPageProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim() }),
       });
-      const data = await res.json();
+      const data: any = await safeResponseJson(res, { success: false, error: 'Network or response error' });
       if (data.success) {
         setOtpSent(true);
         setOtpNotice(data.message || `Verification code sent to ${email}.`);
@@ -99,7 +100,7 @@ export const PortalLoginPage: React.FC<PortalLoginPageProps> = ({
         }),
       });
 
-      const data = await res.json();
+      const data: any = await safeResponseJson(res, { success: false, error: 'Login service unavailable' });
 
       if (!res.ok || !data.success) {
         // Backend rejection (e.g. 403 Forbidden for customer role)
@@ -124,72 +125,11 @@ export const PortalLoginPage: React.FC<PortalLoginPageProps> = ({
       setCurrentSession(userAccount, true);
       onLoginSuccess(userAccount);
     } catch (err: any) {
-      // Local fallback in case server route is unavailable
-      console.warn('Backend login request error, checking local registry:', err);
-
-      // Verify role locally if server connection fails
-      if (cleanEmail === 'nanipallimaheshkumar@gmail.com' && (password === '132908' || otp === '123456')) {
-        if (!isAdmin && portalType !== 'delivery') {
-          setError('Access Denied: You do not have permission to access this portal.');
-          setLoading(false);
-          return;
-        }
-        const adminUser: UserAccount = {
-          id: 'admin-mahesh',
-          name: 'Mahesh Kumar',
-          email: cleanEmail,
-          role: 'admin',
-          phone: '+91 99001 12233',
-          registeredAt: new Date().toISOString(),
-        };
-        setCurrentSession(adminUser, true);
-        onLoginSuccess(adminUser);
-      } else if (cleanEmail === 'arjun@freshlane.com' && (password === 'driver123' || otp === '123456')) {
-        if (isAdmin) {
-          setError('Access Denied: You do not have permission to access this portal.');
-          setLoading(false);
-          return;
-        }
-        const driverUser: UserAccount = {
-          id: 'DRV-101',
-          name: 'Arjun S.',
-          email: cleanEmail,
-          role: 'delivery_partner',
-          phone: '+91 98450 12345',
-          registeredAt: new Date().toISOString(),
-        };
-        setCurrentSession(driverUser, true);
-        onLoginSuccess(driverUser);
-      } else if (cleanEmail === 'riya@example.com') {
-        // Customer account attempting portal login
-        setError('Access Denied: You do not have permission to access this portal.');
-      } else {
-        setError('Invalid credentials or unauthorized account.');
-      }
+      console.error('Backend login request error:', err);
+      setError(err?.message || 'Authentication failed. Please verify your credentials and network connection.');
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleFillAdmin = () => {
-    setEmail('nanipallimaheshkumar@gmail.com');
-    setPassword('132908');
-    setAuthMode('password');
-    setError(null);
-  };
-
-  const handleFillDriver = () => {
-    setEmail('arjun@freshlane.com');
-    setPassword('driver123');
-    setAuthMode('password');
-    setError(null);
-  };
-
-  const handleFillCustomerTest = () => {
-    setEmail('riya@example.com');
-    setPassword('password123');
-    setAuthMode('password');
-    setError(null);
   };
 
   return (
@@ -405,55 +345,6 @@ export const PortalLoginPage: React.FC<PortalLoginPageProps> = ({
               )}
             </button>
           </form>
-
-          {/* Test Account Autofill Helper for reviewers */}
-          <div className="mt-6 pt-5 border-t border-slate-800">
-            <p className="text-[11px] font-semibold text-slate-400 mb-2.5 flex items-center justify-between">
-              <span>Quick Test Credentials:</span>
-              <span className="text-[10px] text-slate-500 font-normal">Database verified</span>
-            </p>
-            <div className="space-y-2">
-              {isAdmin ? (
-                <button
-                  type="button"
-                  onClick={handleFillAdmin}
-                  className="w-full px-3 py-2 text-[11px] font-semibold bg-amber-950/40 text-amber-200 border border-amber-600/40 rounded-xl hover:bg-amber-900/40 transition-colors cursor-pointer flex items-center justify-between text-left"
-                >
-                  <div className="flex items-center gap-2">
-                    <Shield className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Fill Admin (Mahesh Kumar)</span>
-                  </div>
-                  <span className="text-[10px] font-mono text-amber-400/80">Code: 132908</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleFillDriver}
-                  className="w-full px-3 py-2 text-[11px] font-semibold bg-emerald-950/40 text-emerald-200 border border-emerald-600/40 rounded-xl hover:bg-emerald-900/40 transition-colors cursor-pointer flex items-center justify-between text-left"
-                >
-                  <div className="flex items-center gap-2">
-                    <Bike className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Fill Driver (Arjun S.)</span>
-                  </div>
-                  <span className="text-[10px] font-mono text-emerald-400/80">Pass: driver123</span>
-                </button>
-              )}
-
-              {/* Negative Test: Customer Account trying to access portal */}
-              <button
-                type="button"
-                onClick={handleFillCustomerTest}
-                className="w-full px-3 py-2 text-[11px] font-semibold bg-slate-950 text-slate-300 border border-slate-800 rounded-xl hover:bg-slate-800 hover:text-white transition-colors cursor-pointer flex items-center justify-between text-left"
-                title="Test access denial with a standard customer account"
-              >
-                <div className="flex items-center gap-2">
-                  <UserCheck className="w-3.5 h-3.5 text-rose-400" />
-                  <span>Test Customer Account (Riya Sharma)</span>
-                </div>
-                <span className="text-[10px] text-rose-400 font-bold">Expect: Access Denied</span>
-              </button>
-            </div>
-          </div>
         </div>
 
         {/* Footer Note */}

@@ -26,8 +26,7 @@ interface MarkAsDeliveredButtonProps {
   errorMessage?: string;
   errorDistance?: number;
   shakeTrigger?: number;
-  onMarkDelivered: (simulatedCoords?: { lat: number; lng: number }) => void;
-  onResetOrder?: () => void;
+  onMarkDelivered: () => void;
   isDelivered: boolean;
 }
 
@@ -56,7 +55,6 @@ export const MarkAsDeliveredButton: React.FC<MarkAsDeliveredButtonProps> = ({
   errorDistance,
   shakeTrigger,
   onMarkDelivered,
-  onResetOrder,
   isDelivered,
 }) => {
   const [isShaking, setIsShaking] = useState(false);
@@ -96,17 +94,6 @@ export const MarkAsDeliveredButton: React.FC<MarkAsDeliveredButtonProps> = ({
             )}
           </p>
         </div>
-
-        {onResetOrder && (
-          <div className="text-center pt-1">
-            <button
-              onClick={onResetOrder}
-              className="text-[11px] text-slate-400 hover:text-emerald-400 underline cursor-pointer transition-colors"
-            >
-              Reset to &apos;Out for Delivery&apos; for re-testing
-            </button>
-          </div>
-        )}
       </div>
     );
   }
@@ -357,46 +344,6 @@ export const MarkAsDeliveredButton: React.FC<MarkAsDeliveredButtonProps> = ({
             </motion.button>
           )}
         </AnimatePresence>
-      </div>
-
-      {/* Simulation Helper Buttons for Quick Evaluation & Testing */}
-      <div className="pt-1 flex flex-wrap items-center justify-between gap-2 border-t border-slate-700/50 text-[11px]">
-        <span className="text-slate-400 font-medium flex items-center gap-1">
-          <Crosshair className="w-3 h-3 text-slate-400" />
-          <span>Simulation Tests:</span>
-        </span>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => {
-              // Within 100 meters (e.g. ~15m from customer doorstep)
-              const nearCoords = {
-                lat: order.customerCoords.lat + 0.0001,
-                lng: order.customerCoords.lng + 0.0001,
-              };
-              onMarkDelivered(nearCoords);
-            }}
-            disabled={isLoading || isSuccess}
-            className="px-2.5 py-1 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-300 font-semibold cursor-pointer transition-colors text-[11px] disabled:opacity-40 flex items-center gap-1"
-            title="Simulate driver at customer doorstep (15m offset) to see successful animation"
-          >
-            <span>Test ≤100m (Success)</span>
-          </button>
-          <button
-            onClick={() => {
-              // Far away (>100m, e.g. ~450m offset)
-              const farCoords = {
-                lat: order.customerCoords.lat + 0.004,
-                lng: order.customerCoords.lng + 0.003,
-              };
-              onMarkDelivered(farCoords);
-            }}
-            disabled={isLoading || isSuccess}
-            className="px-2.5 py-1 rounded-lg bg-rose-950/80 hover:bg-rose-900 border border-rose-500/40 text-rose-300 font-semibold cursor-pointer transition-colors text-[11px] disabled:opacity-40 flex items-center gap-1"
-            title="Simulate driver 450m away to see 403 Forbidden geofence error animation"
-          >
-            <span>Test &gt;100m (403 Err)</span>
-          </button>
-        </div>
       </div>
     </div>
   );

@@ -24,6 +24,7 @@ import { saveUserOrder } from '../utils/orderStore';
 import { checkDeliveryEligibility, DeliveryEligibilityResult, TADEPALLIGUDEM_ZONE_AREAS } from '../utils/deliveryZone';
 import { useFreeDeliveryPromotion } from '../utils/freeDeliveryPromo';
 import { normalizeRole } from '../utils/rbac';
+import { safeResponseJson } from '../utils/safeFetch';
 
 function decodeFallback(b64: string): string {
   try {
@@ -144,7 +145,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           clearTimeout(timeoutId);
 
           if (geoRes.ok) {
-            const data = await geoRes.json();
+            const data = await safeResponseJson(geoRes, null);
             if (data && data.address) {
               const addr = data.address;
               const parts = [
@@ -245,6 +246,39 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       customerEmail: user?.email || 'customer@freshlane.com',
     });
 
+    // Sync order to Live Production Database so it immediately dispatches to delivery partners
+    const liveOrderPayload = {
+      id: generatedId,
+      customerName: user?.name || 'Customer',
+      customerEmail: user?.email || 'customer@freshlane.com',
+      customerPhone: contactPhone || user?.phone || '+91 98450 67890',
+      customerAddress: address,
+      customerCoords: rangeStatus?.customerCoords || { lat: 16.8165, lng: 81.5295 },
+      items: items.map((i) => `${i.name} (${i.qty} × ${i.unit})`),
+      totalAmount: grandTotal,
+      status: 'Out for Delivery',
+      driverId: 'DRV-101',
+      driverName: 'Arjun S.',
+      etaMinutes: 22,
+    };
+
+    // Post to express backend
+    fetch('/api/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(liveOrderPayload),
+    }).catch((err) => console.warn('Sync order to /api/orders caught:', err));
+
+    // Also post to Cloudflare Worker if URL is configured
+    if (cloudflareWorkerUrl.trim()) {
+      const base = cloudflareWorkerUrl.trim().replace(/\/$/, '');
+      fetch(`${base}/api/orders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(liveOrderPayload),
+      }).catch((err) => console.warn('Sync order to worker caught:', err));
+    }
+
     onOrderPlaced({
       id: generatedId,
       items,
@@ -305,11 +339,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       });
 
       if (!createOrderRes.ok) {
-        const errJson = await createOrderRes.json().catch(() => ({}));
+        const errJson = await safeResponseJson(createOrderRes, { error: `Server returned ${createOrderRes.status}` });
         throw new Error(errJson.error || `Server returned ${createOrderRes.status} creating order`);
       }
 
-      const orderData = await createOrderRes.json();
+      const orderData = await safeResponseJson(createOrderRes, null);
+      if (!orderData) {
+        throw new Error('Failed to parse order response from server.');
+      }
       const { order_id, amount: orderAmountPaise, currency: orderCurrency, key_id: serverKeyId } = orderData;
 
       if (!order_id) {
@@ -367,7 +404,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               }),
             });
 
-            const verifyData = await verifyRes.json();
+            const verifyData = await safeResponseJson(verifyRes, { success: false, error: 'Failed to parse verification response' });
             setIsVerifying(false);
 
             if (verifyRes.ok && verifyData.success) {

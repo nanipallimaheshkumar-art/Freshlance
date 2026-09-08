@@ -134,79 +134,9 @@ export interface WorkerOrderEntity {
   deliveredDistanceMeters?: number;
 }
 
-// Active orders store for worker runtime
-const workerOrdersDatabase: Map<string, WorkerOrderEntity> = new Map([
-  [
-    "FL-91428",
-    {
-      id: "FL-91428",
-      customerName: "Mahesh Kumar",
-      customerPhone: "+91 98450 67890",
-      customerAddress: "Flat 204, Sri Rama Residency, KN Road, Tadepalligudem, 534102",
-      customerCoords: { lat: 16.8165, lng: 81.5295 },
-      items: ["Alphonso Mangoes (2 kg)", "Kashmir Crisp Apples (1 kg)", "Organic Baby Spinach (250g)"],
-      totalAmount: 540,
-      status: "Out for Delivery",
-      driverId: "DRV-101",
-      driverName: "Arjun S.",
-      etaMinutes: 8,
-      createdAt: new Date(Date.now() - 25 * 60 * 1000).toISOString(),
-    },
-  ],
-  [
-    "FL-91429",
-    {
-      id: "FL-91429",
-      customerName: "Priya Sharma",
-      customerPhone: "+91 99123 45678",
-      customerAddress: "Door 4-12, Subba Rao Peta, Near Clock Tower, Tadepalligudem, 534101",
-      customerCoords: { lat: 16.8142, lng: 81.5312 },
-      items: ["Fresh Tender Coconut (2 pcs)", "Robusta Bananas (1 dozen)"],
-      totalAmount: 220,
-      status: "Out for Delivery",
-      driverId: "DRV-101",
-      driverName: "Arjun S.",
-      etaMinutes: 18,
-      createdAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-    },
-  ],
-  [
-    "FL-91430",
-    {
-      id: "FL-91430",
-      customerName: "Venkat Rao",
-      customerPhone: "+91 98765 43210",
-      customerAddress: "Plot 88, Pentapadu Road, Tadepalligudem, 534102",
-      customerCoords: { lat: 16.8250, lng: 81.5410 },
-      items: ["Seedless Green Grapes (1 kg)", "Fresh Mosambi Sweet Lime (2 kg)"],
-      totalAmount: 380,
-      status: "Preparing",
-      driverId: "DRV-101",
-      driverName: "Arjun S.",
-      etaMinutes: 28,
-      createdAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
-    },
-  ],
-  [
-    "FL-88210",
-    {
-      id: "FL-88210",
-      customerName: "Lakshmi Narayana",
-      customerPhone: "+91 94401 22334",
-      customerAddress: "House 12-5, Police Station Road, Tadepalligudem, 534102",
-      customerCoords: { lat: 16.8120, lng: 81.5260 },
-      items: ["Organic Pomegranate (1 kg)", "Papaya Hybrid (1 pc)"],
-      totalAmount: 310,
-      status: "Delivered",
-      driverId: "DRV-101",
-      driverName: "Arjun S.",
-      etaMinutes: 0,
-      createdAt: new Date(Date.now() - 90 * 60 * 1000).toISOString(),
-      deliveredAt: new Date(Date.now() - 40 * 60 * 1000).toISOString(),
-      deliveredDistanceMeters: 42,
-    },
-  ],
-]);
+// Live orders store for worker runtime
+const workerOrdersDatabase: Map<string, WorkerOrderEntity> = new Map();
+const workerOtpDatabase: Map<string, { code: string; expiresAt: number }> = new Map();
 
 // Evaluate whether an address or coordinates is deliverable within Tadepalligudem 15km
 function checkRange(
@@ -335,23 +265,14 @@ function extractSessionFromWorkerRequest(request: Request, url: URL): DecodedWor
 
   if (!rawToken) return null;
 
-  // Direct role string aliases for test suites and rapid verification
-  const lower = rawToken.toLowerCase();
-  if (lower === "admin" || lower.includes("role=admin")) {
-    return { userId: "admin-mahesh", email: "nanipallimaheshkumar@gmail.com", name: "Admin", role: "admin" };
-  }
-  if (lower === "delivery_partner" || lower === "driver" || lower.includes("role=delivery_partner")) {
-    return { userId: "DRV-101", email: "arjun@freshlane.com", name: "Arjun S.", role: "delivery_partner" };
-  }
-  if (lower === "customer" || lower === "shopper" || lower.includes("role=customer")) {
-    return { userId: "user-demo-1", email: "riya@example.com", name: "Riya Sharma", role: "customer" };
-  }
-
-  // Base64 decoded payload
+  // Base64 decoded session payload
   try {
     const jsonStr = atob(rawToken);
     const parsed = JSON.parse(jsonStr);
     if (parsed && typeof parsed === "object") {
+      if (parsed.exp && typeof parsed.exp === "number" && parsed.exp * 1000 < Date.now()) {
+        return null; // Session expired
+      }
       const r = String(parsed.role || "").toLowerCase().trim();
       let role: WorkerRole = "customer";
       if (r === "admin" || r === "owner" || r === "administrator") {
@@ -367,9 +288,7 @@ function extractSessionFromWorkerRequest(request: Request, url: URL): DecodedWor
       };
     }
   } catch {
-    if (rawToken.includes("admin")) return { userId: "admin", email: "admin@freshlane.com", name: "Admin", role: "admin" };
-    if (rawToken.includes("delivery") || rawToken.includes("driver")) return { userId: "driver", email: "driver@freshlane.com", name: "Driver", role: "delivery_partner" };
-    if (rawToken.includes("customer")) return { userId: "customer", email: "customer@freshlane.com", name: "Customer", role: "customer" };
+    return null;
   }
 
   return null;
@@ -563,10 +482,38 @@ export default {
           return jsonResponse({ success: false, error: "Email address is required." }, 400);
         }
         const code = Math.floor(100000 + Math.random() * 900000).toString();
+        const expiresAt = Date.now() + 10 * 60 * 1000;
+        workerOtpDatabase.set(email, { code, expiresAt });
+
+        // If Resend API key configured in worker env, dispatch real email
+        if (env.RESEND_API_KEY) {
+          try {
+            await fetch("https://api.resend.com/emails", {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${env.RESEND_API_KEY}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                from: "FreshLane Auth <onboarding@resend.dev>",
+                to: [email],
+                subject: "Your FreshLane Verification Code",
+                html: `<div style="font-family:sans-serif;padding:20px;border:1px solid #e2e8f0;border-radius:12px;">
+                  <h2 style="color:#059669;">FreshLane Login Verification</h2>
+                  <p>Your one-time login verification code is:</p>
+                  <div style="font-size:32px;font-weight:bold;letter-spacing:6px;color:#0f172a;background:#f1f5f9;padding:16px;text-align:center;border-radius:8px;margin:16px 0;">${code}</div>
+                  <p style="color:#64748b;font-size:12px;">This code is valid for 10 minutes. For your security, never share this code with anyone.</p>
+                </div>`,
+              }),
+            });
+          } catch (mailErr) {
+            console.warn("Failed to dispatch Resend OTP from worker:", mailErr);
+          }
+        }
+
         return jsonResponse({
           success: true,
-          message: `Verification code sent to ${email}. (Code: ${code} for testing)`,
-          code,
+          message: `Verification code sent to ${email}.`,
           expiresInSeconds: 600,
         });
       } catch {
@@ -626,12 +573,16 @@ export default {
           }, 401);
         }
 
-        // Validate password or OTP (accepts 123456 or matching password as demo bypass)
+        // Validate password or OTP strictly
         let isValid = false;
-        if (otp && (otp === "123456" || otp === user.password || otp.length === 6)) {
-          isValid = true;
+        if (otp) {
+          const stored = workerOtpDatabase.get(email);
+          if (stored && stored.code === otp && Date.now() <= stored.expiresAt) {
+            isValid = true;
+            workerOtpDatabase.delete(email); // Single-use OTP
+          }
         }
-        if (password && user.password && user.password === password) {
+        if (!isValid && password && user.password && user.password === password) {
           isValid = true;
         }
 
@@ -639,7 +590,7 @@ export default {
           return jsonResponse({
             success: false,
             error: otp
-              ? "Invalid verification code. Please check the code and try again."
+              ? "Invalid or expired verification code. Please request a new code and try again."
               : "Incorrect password. Please verify and try again.",
           }, 401);
         }
@@ -673,6 +624,7 @@ export default {
           email: user.email,
           role: user.role,
           iat: Math.floor(Date.now() / 1000),
+          exp: Math.floor(Date.now() / 1000) + 7 * 86400,
         };
         const token = btoa(JSON.stringify(tokenPayload));
 
@@ -827,9 +779,50 @@ export default {
       });
     }
 
-    // 5a. Orders List for Delivery Portal (GET /api/orders or /api/delivery/orders)
+    // 5a. Create / Sync New Live Order (POST /api/orders)
+    if (url.pathname === "/api/orders" && request.method === "POST") {
+      try {
+        const body = (await request.json()) as any;
+        if (!body || !body.id) {
+          return jsonResponse({ error: "Order ID is required" }, 400);
+        }
+
+        const orderEntity: WorkerOrderEntity = {
+          id: body.id,
+          customerName: body.customerName || "Customer",
+          customerPhone: body.customerPhone || "+91 98450 67890",
+          customerAddress: body.customerAddress || "KN Road, Tadepalligudem, 534102",
+          customerCoords: body.customerCoords || { lat: 16.8165, lng: 81.5295 },
+          items: Array.isArray(body.items) ? body.items : ["Fresh Produce Express"],
+          totalAmount: Number(body.totalAmount) || 250,
+          status: body.status || "Out for Delivery",
+          driverId: body.driverId || "DRV-101",
+          driverName: body.driverName || "Arjun S.",
+          etaMinutes: body.etaMinutes || 20,
+          createdAt: new Date().toISOString(),
+        };
+
+        workerOrdersDatabase.set(body.id, orderEntity);
+        return jsonResponse({ success: true, order: orderEntity });
+      } catch {
+        return jsonResponse({ error: "Invalid JSON payload" }, 400);
+      }
+    }
+
+    // 5b. Live Orders List for Delivery Portal (GET /api/orders or /api/delivery/orders)
     if ((url.pathname === "/api/orders" || url.pathname === "/api/delivery/orders") && request.method === "GET") {
-      const driverId = url.searchParams.get("driverId");
+      const session = extractSessionFromWorkerRequest(request, url);
+      if (!session || (session.role !== "delivery_partner" && session.role !== "admin")) {
+        return jsonResponse(
+          {
+            success: false,
+            error: "Authentication required: A valid session token with delivery partner or admin role is required.",
+          },
+          401
+        );
+      }
+
+      const driverId = url.searchParams.get("driverId") || (session.role === "delivery_partner" ? session.userId : undefined);
       let list = Array.from(workerOrdersDatabase.values());
       if (driverId) {
         list = list.filter((o) => o.driverId === driverId);
@@ -840,9 +833,19 @@ export default {
       });
     }
 
-    // 5b. Delivery Driver Mark as Delivered with Geolocation Validation (POST /api/orders/:orderId/deliver or /api/delivery/orders/:orderId/deliver)
+    // 5c. Delivery Driver Mark as Delivered with Strict Geolocation Validation (POST /api/orders/:orderId/deliver or /api/delivery/orders/:orderId/deliver)
     const deliverMatch = url.pathname.match(/^\/api\/(?:delivery\/)?orders\/([^/]+)\/deliver$/);
     if (deliverMatch && request.method === "POST") {
+      const session = extractSessionFromWorkerRequest(request, url);
+      if (!session || (session.role !== "delivery_partner" && session.role !== "admin")) {
+        return jsonResponse(
+          {
+            error: "Authentication required: Valid session token with delivery_partner or admin role is required.",
+          },
+          401
+        );
+      }
+
       const orderId = deliverMatch[1];
       const order = workerOrdersDatabase.get(orderId);
       if (!order) {
@@ -878,7 +881,7 @@ export default {
         order.customerCoords
       );
 
-      // Validation rule: Driver must be within 100 meters (0.1 km) of customer delivery address
+      // Strict validation rule: Driver must be within 100 meters (0.1 km) of customer delivery address
       const MAX_ALLOWED_METERS = 100;
 
       if (distanceMeters > MAX_ALLOWED_METERS) {
@@ -900,6 +903,33 @@ export default {
       order.deliveredDistanceMeters = Math.round(distanceMeters);
       order.etaMinutes = 0;
       workerOrdersDatabase.set(orderId, order);
+
+      // Send real production delivery notification email via Resend if configured
+      if (env.RESEND_API_KEY) {
+        try {
+          await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${env.RESEND_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              from: "FreshLane Deliveries <onboarding@resend.dev>",
+              to: ["nanipallimaheshkumar@gmail.com"],
+              subject: `Order #${order.id} Delivered Successfully`,
+              html: `<div style="font-family:sans-serif;padding:20px;border:1px solid #e2e8f0;border-radius:12px;">
+                <h2 style="color:#059669;margin-top:0;">FreshLane Delivery Confirmation</h2>
+                <p>Order <strong>#${order.id}</strong> has been successfully marked as delivered by driver ${order.driverName || "Arjun S."}.</p>
+                <p><strong>Customer:</strong> ${order.customerName}</p>
+                <p><strong>Address:</strong> ${order.customerAddress}</p>
+                <p><strong>Verified GPS Distance:</strong> ${Math.round(distanceMeters)}m from destination.</p>
+              </div>`,
+            }),
+          });
+        } catch (notifyErr) {
+          console.warn("Failed to dispatch Resend delivery alert from worker:", notifyErr);
+        }
+      }
 
       return jsonResponse({
         success: true,
@@ -1135,6 +1165,14 @@ export default {
       } catch (err: any) {
         return jsonResponse({ error: err.message || "Internal error sending email OTP" }, 500);
       }
+    }
+
+    // Catch-all for unhandled /api/* requests in Cloudflare Workers to prevent returning HTML
+    if (url.pathname.startsWith("/api")) {
+      return jsonResponse({
+        error: `Worker API route not found: ${request.method} ${url.pathname}`,
+        status: 404,
+      }, 404);
     }
 
     // Fallback for static assets in Cloudflare Workers

@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { DriverRecord, OrderRecord } from '../types';
 import { getRegisteredDrivers, registerDriverAccount, deleteDriverAccount } from '../utils/authStore';
+import { safeResponseJson } from '../utils/safeFetch';
 
 interface AdminFleetViewProps {
   orders: OrderRecord[];
@@ -54,7 +55,8 @@ export const AdminFleetView: React.FC<AdminFleetViewProps> = ({
   const fetchDrivers = async () => {
     try {
       const res = await fetch('/api/drivers');
-      const serverDrivers: DriverRecord[] = res.ok ? (await res.json()).drivers || [] : [];
+      const json = res.ok ? await safeResponseJson(res, { drivers: [] }) : { drivers: [] };
+      const serverDrivers: DriverRecord[] = json?.drivers || [];
       const registered = getRegisteredDrivers();
 
       // Merge backend drivers and registered accounts
