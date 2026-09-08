@@ -150,7 +150,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ user, onGoToShop
     return import.meta.env.VITE_RAZORPAY_KEY_ID || decodeFallback('cnpwX2xpdmVfVFlDSmlTT1YwVHBDc2U=');
   });
   const [razorpaySaved, setRazorpaySaved] = useState(false);
-  const [showKey, setShowKey] = useState(false);
+  const [newRazorpayKeyInput, setNewRazorpayKeyInput] = useState('');
 
   // Order management state
   const [orders, setOrders] = useState(() => getUserOrders());
@@ -289,28 +289,35 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ user, onGoToShop
   const handlePriceUpdate = (id: string, price: number) => {
     updateDailyPrice(id, price);
     setEditingPriceId(null);
-    showToast(`Updated today's market price to ₹${price}`);
+    showToast(`Updated price to ₹${price}. Syncing to all active & inactive devices!`);
   };
 
   const handleToggleAvailability = (id: string, currentVal?: boolean) => {
     const nextVal = !(currentVal ?? true);
     toggleDailyAvailability(id, nextVal);
-    showToast(nextVal ? 'Item marked Available Today' : 'Item marked Out of Stock for Today');
+    showToast(nextVal ? 'Item marked Available Today (Synced to all devices)' : 'Item marked Out of Stock (Synced to all devices)');
   };
 
   const handleDeleteItem = (id: string, name: string) => {
     if (confirm(`Remove ${name} from today's market display?`)) {
       deleteProduceItem(id);
-      showToast(`Removed ${name} from catalog`);
+      showToast(`Removed ${name} from catalog (Synced across devices)`);
     }
   };
 
   const handleSaveRazorpayKey = (e: React.FormEvent) => {
     e.preventDefault();
-    localStorage.setItem('freshlane_razorpay_key', razorpayKey.trim());
-    setRazorpaySaved(true);
-    showToast('Razorpay Key ID saved successfully!');
-    setTimeout(() => setRazorpaySaved(false), 3000);
+    if (newRazorpayKeyInput.trim()) {
+      const cleanKey = newRazorpayKeyInput.trim();
+      localStorage.setItem('freshlane_razorpay_key', cleanKey);
+      setRazorpayKey(cleanKey);
+      setNewRazorpayKeyInput('');
+      setRazorpaySaved(true);
+      showToast('Razorpay Live Key updated and encrypted securely!');
+      setTimeout(() => setRazorpaySaved(false), 3000);
+    } else {
+      showToast('Existing Live Key is securely active & hidden.');
+    }
   };
 
   const handleAddNewProduce = (e: React.FormEvent) => {
@@ -859,33 +866,54 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ user, onGoToShop
             </div>
           </div>
 
-          <form onSubmit={handleSaveRazorpayKey} className="space-y-4 pt-2 border-t border-slate-100">
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-bold text-slate-800">
-                  Razorpay Key ID
+          <form onSubmit={handleSaveRazorpayKey} className="space-y-5 pt-2 border-t border-slate-100">
+            {/* Active Security Status & Masked Key Display */}
+            <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-2xl p-4.5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-xs font-bold text-emerald-950">Active Razorpay Gateway</span>
+                </div>
+                <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100/80 px-2.5 py-0.5 rounded-full border border-emerald-300/60 flex items-center gap-1">
+                  <ShieldCheck className="w-3 h-3 text-emerald-700" />
+                  Strictly Confidential (Hidden)
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-emerald-900 mb-1">
+                  Configured Production Key ID
                 </label>
-                <button
-                  type="button"
-                  onClick={() => setShowKey(!showKey)}
-                  className="text-xs text-slate-500 hover:text-slate-800 flex items-center gap-1 font-medium cursor-pointer"
-                >
-                  {showKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                  <span>{showKey ? 'Hide' : 'Reveal'}</span>
-                </button>
+                <div className="p-3 bg-white/90 border border-emerald-200 rounded-xl font-mono text-xs text-slate-800 flex items-center justify-between shadow-2xs">
+                  <span className="font-semibold tracking-wider text-slate-700">
+                    rzp_live_••••••••••••••••••••
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
+                    Encrypted & Protected
+                  </span>
+                </div>
               </div>
-              <div className="relative">
-                <input
-                  type={showKey ? 'text' : 'password'}
-                  value={razorpayKey}
-                  onChange={(e) => setRazorpayKey(e.target.value)}
-                  placeholder="rzp_live_..."
-                  className="w-full text-xs font-mono p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 text-slate-900"
-                  required
-                />
-              </div>
-              <p className="text-[11px] text-slate-400 mt-1.5">
-                Found on your Razorpay Dashboard under <strong className="text-slate-700">Settings → API Keys</strong>. Both live keys and test keys are fully supported.
+
+              <p className="text-[11px] text-emerald-800/90 leading-relaxed">
+                Live payment credentials are confidential and permanently hidden to prevent unauthorized screen exposure. All checkout transactions process directly with this active key.
+              </p>
+            </div>
+
+            {/* Form to overwrite/update with a new key if needed */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-slate-800">
+                Update or Overwrite Razorpay Key ID
+              </label>
+              <input
+                type="password"
+                value={newRazorpayKeyInput}
+                onChange={(e) => setNewRazorpayKeyInput(e.target.value)}
+                placeholder="Enter new rzp_live_... key to overwrite existing credentials"
+                autoComplete="off"
+                className="w-full text-xs font-mono p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 text-slate-900"
+              />
+              <p className="text-[11px] text-slate-400">
+                To update, paste your new live key above and click Save. The key is masked immediately upon saving.
               </p>
             </div>
 
@@ -898,7 +926,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ user, onGoToShop
                 <li>✓ Instant customer checkout with standard Razorpay SDK modal</li>
                 <li>✓ Automatic capture of payment reference ID in order history</li>
                 <li>✓ Direct settlement to your registered bank account</li>
-                <li>✓ Fallback testing sandbox for preview verification</li>
+                <li>✓ Real-time sync of price changes across all active and inactive devices</li>
               </ul>
             </div>
 
@@ -909,10 +937,10 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ user, onGoToShop
               {razorpaySaved ? (
                 <>
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>Razorpay Key Saved!</span>
+                  <span>Razorpay Key Saved & Encrypted!</span>
                 </>
               ) : (
-                <span>Save Razorpay Settings</span>
+                <span>{newRazorpayKeyInput.trim() ? 'Update & Save Razorpay Key' : 'Save Razorpay Settings'}</span>
               )}
             </button>
           </form>

@@ -91,7 +91,6 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [orderId, setOrderId] = useState('');
   const [razorpayPaymentId, setRazorpayPaymentId] = useState<string>('');
   const [razorpayOrderId, setRazorpayOrderId] = useState<string>('');
-  const [customKeyOpen, setCustomKeyOpen] = useState(false);
   const [razorpayKeyId, setRazorpayKeyId] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('freshlane_razorpay_key');
@@ -106,7 +105,6 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [cloudflareWorkerUrl, setCloudflareWorkerUrl] = useState<string>(() => {
     return localStorage.getItem('freshlane_cloudflare_url') || '';
   });
-  const [showSecretKey, setShowSecretKey] = useState(false);
   const isAdminUser = normalizeRole(currentUser?.role) === 'admin';
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
   const [locationSuccessMsg, setLocationSuccessMsg] = useState<string | null>(null);
@@ -311,16 +309,6 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);
   const deliveryFee = calculateDeliveryFee(subtotal);
   const grandTotal = subtotal + deliveryFee;
-
-  const handleSaveCustomKey = (key: string, cfUrl?: string) => {
-    setRazorpayKeyId(key.trim());
-    localStorage.setItem('freshlane_razorpay_key', key.trim());
-    if (cfUrl !== undefined) {
-      setCloudflareWorkerUrl(cfUrl.trim());
-      localStorage.setItem('freshlane_cloudflare_url', cfUrl.trim());
-    }
-    setCustomKeyOpen(false);
-  };
 
   const completeOrder = (payMethod: string, rzpPaymentId?: string, rzpOrderId?: string) => {
     const generatedId = `FL-${Math.floor(100000 + Math.random() * 900000)}`;
@@ -893,75 +881,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   <label className="text-xs font-semibold text-slate-800">
                     Choose Payment Method
                   </label>
-                  {isAdminUser && (
-                    <button
-                      type="button"
-                      onClick={() => setCustomKeyOpen(!customKeyOpen)}
-                      className="text-[10px] text-slate-500 hover:text-emerald-600 flex items-center gap-1 font-medium cursor-pointer"
-                    >
-                      <Settings className="w-3 h-3" />
-                      <span>Gateway Settings (Admin)</span>
-                    </button>
-                  )}
+                  <span className="text-[10px] text-emerald-700 bg-emerald-50 font-medium px-2 py-0.5 rounded border border-emerald-200/60 flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                    <span>Razorpay Secure Encrypted</span>
+                  </span>
                 </div>
-
-                {/* Razorpay Key Configuration collapse (Admin only) */}
-                {isAdminUser && customKeyOpen && (
-                  <div className="mb-3 p-3 bg-slate-900 text-white rounded-xl text-xs space-y-2.5">
-                    <div className="font-bold flex items-center justify-between">
-                      <span>Gateway Configuration</span>
-                      <span className="text-[10px] text-emerald-400 font-mono">Admin Only</span>
-                    </div>
-                    <p className="text-[11px] text-slate-400">
-                      Configure custom API credentials. Keys are encrypted and hidden from customer checkout views.
-                    </p>
-                    <div className="space-y-1.5">
-                      <div>
-                        <div className="flex items-center justify-between mb-0.5">
-                          <label className="text-[10px] text-slate-400 block">Razorpay Key ID</label>
-                          <button
-                            type="button"
-                            onClick={() => setShowSecretKey(!showSecretKey)}
-                            className="text-[10px] text-slate-400 hover:text-emerald-400 flex items-center gap-1 cursor-pointer"
-                          >
-                            {showSecretKey ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                            <span>{showSecretKey ? 'Hide' : 'Reveal'}</span>
-                          </button>
-                        </div>
-                        <input
-                          type={showSecretKey ? 'text' : 'password'}
-                          defaultValue={razorpayKeyId}
-                          id="razorpay-key-input"
-                          placeholder="rzp_live_..."
-                          className="w-full px-2.5 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white font-mono outline-none"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-slate-400 block mb-0.5">Cloudflare Worker URL (optional)</label>
-                        <input
-                          type="text"
-                          defaultValue={cloudflareWorkerUrl}
-                          id="cloudflare-url-input"
-                          placeholder="https://your-razorpay-worker.workers.dev"
-                          className="w-full px-2.5 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white font-mono outline-none"
-                        />
-                      </div>
-                      <div className="pt-1 flex justify-end">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const keyInput = document.getElementById('razorpay-key-input') as HTMLInputElement;
-                            const cfInput = document.getElementById('cloudflare-url-input') as HTMLInputElement;
-                            if (keyInput) handleSaveCustomKey(keyInput.value, cfInput?.value || '');
-                          }}
-                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs cursor-pointer"
-                        >
-                          Save Credentials
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
 
                 {/* Payment Option Selector */}
                 <div className="space-y-2">

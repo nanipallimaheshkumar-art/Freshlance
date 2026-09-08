@@ -16,6 +16,7 @@ import { ContactModal } from './components/ContactModal';
 import { UserAccount, CartItem, ProduceItem } from './types';
 import { getCurrentSession, clearCurrentSession } from './utils/authStore';
 import { evaluateRouteGuard, parseCurrentRoute, normalizeRole, AppRole } from './utils/rbac';
+import { initCatalogSync, subscribeProduceCatalog } from './utils/produceStore';
 
 export default function App() {
   const [user, setUser] = useState<UserAccount | null>(() => getCurrentSession());
@@ -66,6 +67,44 @@ export default function App() {
       setToastMessage((prev) => (prev === message ? null : prev));
     }, 3500);
   };
+
+  // Real-time catalog multi-device sync and cart auto-recalculation
+  useEffect(() => {
+    // 1. Initialize active polling & inactive device resume handlers
+    const cleanupSync = initCatalogSync();
+
+    // 2. Synchronize active shopping cart if any price/item changes
+    const cleanupSubscribe = subscribeProduceCatalog((latestCatalog) => {
+      setCartItems((prevCart) => {
+        if (!prevCart || prevCart.length === 0) return prevCart;
+        let hasChanges = false;
+        const updated = prevCart.map((cartItem) => {
+          const matching = latestCatalog.find((p) => p.id === cartItem.produce.id);
+          if (matching && (matching.price !== cartItem.produce.price || matching.isAvailableToday !== cartItem.produce.isAvailableToday)) {
+            hasChanges = true;
+            return {
+              ...cartItem,
+              produce: matching,
+            };
+          }
+          return cartItem;
+        });
+
+        if (hasChanges) {
+          try {
+            localStorage.setItem('freshlane_cart', JSON.stringify(updated));
+          } catch {}
+          return updated;
+        }
+        return prevCart;
+      });
+    });
+
+    return () => {
+      cleanupSync();
+      cleanupSubscribe();
+    };
+  }, []);
 
   // Centralized route navigation handler with strict RBAC Route Guard enforcement
   const navigateToRoute = (targetPath: string) => {
