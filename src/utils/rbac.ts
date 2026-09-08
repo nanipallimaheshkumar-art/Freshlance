@@ -228,7 +228,7 @@ export function evaluateRouteGuard(
     };
   }
 
-  // 3. Unauthenticated Guest:
+  // 3. Unauthenticated Guest: Site opening is login only (cannot access store until authenticated)
   if (userRole === null) {
     if (route === 'admin' || route === 'delivery') {
       return {
@@ -237,19 +237,18 @@ export function evaluateRouteGuard(
         requiresPortalLogin: true,
       };
     }
-    // Strict Checkout Route Guard: Guest cannot access /checkout or /payment
-    if (route === 'checkout') {
+    // Strict Site Auth Gate: Unauthenticated users cannot view storefront, shop, or checkout
+    if (route !== 'login') {
       return {
         allowed: false,
         redirectTo: '/login',
         targetRoute: 'login',
-        deniedReason: 'Authentication required. Please sign in or verify OTP before accessing checkout.',
-        notificationMessage: 'Please log in with OTP to access checkout.',
+        deniedReason: 'Authentication required. Please sign in to enter the FreshLane produce store.',
       };
     }
     return {
       allowed: true,
-      targetRoute: route,
+      targetRoute: 'login',
     };
   }
 

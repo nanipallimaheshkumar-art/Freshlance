@@ -23,6 +23,7 @@ interface CreateAccountPageProps {
   onRegisterSuccess: (user: UserAccount) => void;
   onGoToLogin: () => void;
   onGoToShop: () => void;
+  isAuthGate?: boolean;
 }
 
 // Indian Delivery Neighbourhoods within Tadepalligudem Hub (534102, West Godavari, AP, India)
@@ -39,6 +40,7 @@ export const CreateAccountPage: React.FC<CreateAccountPageProps> = ({
   onRegisterSuccess,
   onGoToLogin,
   onGoToShop,
+  isAuthGate = false,
 }) => {
   // Step: 'details' -> 'verify_otp'
   const [step, setStep] = useState<'details' | 'verify_otp'>('details');
@@ -649,14 +651,21 @@ export const CreateAccountPage: React.FC<CreateAccountPageProps> = ({
         </div>
 
         {/* Back to market link */}
-        <div className="text-center mt-5">
-          <button
-            onClick={onGoToShop}
-            className="text-xs font-medium text-slate-500 hover:text-slate-900 cursor-pointer transition-colors"
-          >
-            ← Back to FreshLane produce market
-          </button>
-        </div>
+        {!isAuthGate ? (
+          <div className="text-center mt-5">
+            <button
+              onClick={onGoToShop}
+              className="text-xs font-medium text-slate-500 hover:text-slate-900 cursor-pointer transition-colors"
+            >
+              ← Back to FreshLane produce market
+            </button>
+          </div>
+        ) : (
+          <div className="text-center mt-4 text-[11px] text-slate-400 font-medium flex items-center justify-center gap-1.5">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Create an account or sign in to enter the FreshLane store</span>
+          </div>
+        )}
       </div>
     </div>
   );

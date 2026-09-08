@@ -40,7 +40,10 @@ export default function App() {
   });
 
   const [portalLoginError, setPortalLoginError] = useState<string | null>(null);
-  const [currentTab, setCurrentTab] = useState<'shop' | 'orders' | 'tracking' | 'login' | 'register'>('shop');
+  const [currentTab, setCurrentTab] = useState<'shop' | 'orders' | 'tracking' | 'login' | 'register'>(() => {
+    const session = getCurrentSession();
+    return session ? 'shop' : 'login';
+  });
   const [activeTrackingOrderId, setActiveTrackingOrderId] = useState<string>('FL-91428');
   const [cartItems, setCartItems] = useState<CartItem[]>(() => {
     try {
@@ -139,10 +142,11 @@ export default function App() {
           window.history.pushState({}, '', '/login');
         } catch {}
       } else {
+        sessionStorage.setItem('freshlane_return_url', targetPath);
         setActiveWeb('customer');
-        setCurrentTab('shop');
+        setCurrentTab('login');
         try {
-          window.history.pushState({}, '', '/');
+          window.history.pushState({}, '', '/login');
         } catch {}
       }
       return;
@@ -168,6 +172,14 @@ export default function App() {
       setActiveWeb('customer');
       setIsCheckoutOpen(true);
     } else {
+      if (!user) {
+        setActiveWeb('customer');
+        setCurrentTab('login');
+        try {
+          window.history.pushState({}, '', '/login');
+        } catch {}
+        return;
+      }
       setActiveWeb('customer');
       setCurrentTab('shop');
       try {
@@ -237,9 +249,9 @@ export default function App() {
           } catch {}
         } else {
           setActiveWeb('customer');
-          setCurrentTab('shop');
+          setCurrentTab('login');
           try {
-            window.history.replaceState({}, '', '/');
+            window.history.replaceState({}, '', '/login');
           } catch {}
         }
         return;
@@ -252,13 +264,23 @@ export default function App() {
         if (!user) {
           sessionStorage.setItem('freshlane_return_url', '/checkout');
           setCurrentTab('login');
-          showToast('Please log in with OTP to access checkout.');
+          showToast('Please log in to access checkout.');
           try {
             window.history.replaceState({}, '', '/login');
           } catch {}
           return;
         }
         setIsCheckoutOpen(true);
+      } else {
+        if (!user) {
+          setCurrentTab('login');
+          try {
+            window.history.replaceState({}, '', '/login');
+          } catch {}
+          return;
+        }
+        setCurrentTab('shop');
+        setIsCheckoutOpen(false);
       }
     };
 
@@ -345,9 +367,9 @@ export default function App() {
     setPortalLoginError(null);
     showToast('Signed out of FreshLane.');
     setActiveWeb('customer');
-    setCurrentTab('shop');
+    setCurrentTab('login');
     try {
-      window.history.pushState({}, '', '/');
+      window.history.pushState({}, '', '/login');
     } catch {}
   };
 
@@ -373,6 +395,9 @@ export default function App() {
     }
 
     setCurrentTab('shop');
+    try {
+      window.history.pushState({}, '', '/');
+    } catch {}
   };
 
   const handlePortalLoginSuccess = (signedInUser: UserAccount) => {
@@ -403,6 +428,9 @@ export default function App() {
     }
 
     setCurrentTab('shop');
+    try {
+      window.history.pushState({}, '', '/');
+    } catch {}
   };
 
   const totalCartCount = cartItems.reduce((sum, item) => sum + item.qty, 0);
@@ -503,7 +531,92 @@ export default function App() {
   }
 
   // ---------------------------------------------------------------------------
-  // 3. CUSTOMER STOREFRONT ROUTING (/)
+  // 3. AUTHENTICATION GATE (LOGIN ONLY FOR UNAUTHENTICATED VISITORS)
+  // When opening the site, unauthenticated visitors see ONLY the login screen.
+  // ---------------------------------------------------------------------------
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col font-sans selection:bg-emerald-500 selection:text-white w-full max-w-full overflow-x-hidden">
+        {/* Toast Notification */}
+        {toastMessage && (
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-xs font-semibold px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 border border-slate-700/50 animate-fade-in">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+            <span>{toastMessage}</span>
+          </div>
+        )}
+
+        {/* Clean top bar for Authentication screen */}
+        <header className="w-full border-b border-slate-200 bg-white/90 backdrop-blur-md px-4 py-3.5 sticky top-0 z-30">
+          <div className="max-w-4xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-base shadow-xs">
+                ✦
+              </div>
+              <div>
+                <div className="font-extrabold text-base tracking-tight text-slate-900 leading-none">
+                  freshlane<span className="text-emerald-600">.market</span>
+                </div>
+                <div className="text-[10px] text-slate-400 font-medium mt-0.5">
+                  Tadepalligudem 30-Min Fresh Produce Hub
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentTab(currentTab === 'register' ? 'login' : 'register')}
+                className="text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3.5 py-1.5 rounded-xl transition-colors cursor-pointer border border-emerald-200/70"
+              >
+                {currentTab === 'register' ? '← Back to Sign In' : 'Create Account'}
+              </button>
+            </div>
+          </div>
+        </header>
+
+        {/* Authentication Content: Login or Create Account Only */}
+        <main className="flex-1 flex items-center justify-center p-4">
+          {currentTab === 'register' ? (
+            <CreateAccountPage
+              onRegisterSuccess={handleRegisterSuccess}
+              onGoToLogin={() => setCurrentTab('login')}
+              onGoToShop={() => {}}
+              isAuthGate={true}
+            />
+          ) : (
+            <LoginPage
+              onLoginSuccess={handleCustomerLoginSuccess}
+              onGoToRegister={() => setCurrentTab('register')}
+              onGoToShop={() => {}}
+              onOpenOperationsPortal={() => navigateToRoute('/admin')}
+              isAuthGate={true}
+            />
+          )}
+        </main>
+
+        {/* Minimal Bottom Bar with subtle staff portal links */}
+        <footer className="py-4 border-t border-slate-200 text-center text-xs text-slate-500 bg-white">
+          <div className="max-w-md mx-auto flex items-center justify-center gap-4 text-[11px] font-medium text-slate-400">
+            <button
+              onClick={() => navigateToRoute('/delivery')}
+              className="hover:text-emerald-600 transition-colors cursor-pointer"
+            >
+              Delivery Partner Portal
+            </button>
+            <span>·</span>
+            <button
+              onClick={() => navigateToRoute('/admin')}
+              className="hover:text-amber-600 transition-colors cursor-pointer"
+            >
+              Operations Admin Access
+            </button>
+          </div>
+        </footer>
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // 4. AUTHENTICATED CUSTOMER STOREFRONT (Full access to all produce & features)
   // ---------------------------------------------------------------------------
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col font-sans selection:bg-emerald-500 selection:text-white w-full max-w-full overflow-x-hidden">

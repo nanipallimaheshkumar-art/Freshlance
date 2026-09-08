@@ -8,6 +8,7 @@ interface LoginPageProps {
   onGoToRegister: () => void;
   onGoToShop: () => void;
   onOpenOperationsPortal?: () => void;
+  isAuthGate?: boolean;
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({
@@ -15,6 +16,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   onGoToRegister,
   onGoToShop,
   onOpenOperationsPortal,
+  isAuthGate = false,
 }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -198,14 +200,21 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
         {/* Back to market & Staff portal link */}
         <div className="text-center mt-5 space-y-2">
-          <div>
-            <button
-              onClick={onGoToShop}
-              className="text-xs font-medium text-slate-500 hover:text-slate-900 cursor-pointer transition-colors"
-            >
-              ← Return to FreshLane market
-            </button>
-          </div>
+          {!isAuthGate ? (
+            <div>
+              <button
+                onClick={onGoToShop}
+                className="text-xs font-medium text-slate-500 hover:text-slate-900 cursor-pointer transition-colors"
+              >
+                ← Return to FreshLane market
+              </button>
+            </div>
+          ) : (
+            <div className="text-[11px] text-slate-400 font-medium flex items-center justify-center gap-1.5">
+              <Shield className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Sign in required to enter and browse Tadepalligudem produce market</span>
+            </div>
+          )}
           {onOpenOperationsPortal && (
             <div>
               <button
