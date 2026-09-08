@@ -26,7 +26,6 @@ import {
   DeliveryEligibilityResult,
   TADEPALLIGUDEM_HUB,
 } from '../utils/deliveryZone';
-import { useFreeDeliveryPromotion } from '../utils/freeDeliveryPromo';
 
 interface StorefrontProps {
   onAddToCart: (item: { id: string; name: string; price: number; unit: string; image: string }, qty?: number) => void;
@@ -41,7 +40,6 @@ export const Storefront: React.FC<StorefrontProps> = ({
   onGoToOrderHistory,
   searchQuery,
 }) => {
-  const { isFreeDeliveryActive, formattedTime } = useFreeDeliveryPromotion();
   const [products, setProducts] = useState<ProduceItem[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [userLocation, setUserLocation] = useState('KN Road, Tadepalligudem (PIN 534102)');
@@ -130,14 +128,6 @@ export const Storefront: React.FC<StorefrontProps> = ({
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                 <span>Tadepalligudem Hub (534102) · 15km Strict Radius</span>
               </div>
-              {isFreeDeliveryActive && (
-                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-600 text-white text-xs font-bold shadow-xs animate-bounce">
-                  <span>⚡ 15-MIN FREE DELIVERY</span>
-                  <span className="bg-emerald-800 text-emerald-100 font-mono text-[10px] px-1.5 py-0.5 rounded">
-                    {formattedTime}
-                  </span>
-                </div>
-              )}
             </div>
 
             <h1 className="text-3xl sm:text-5xl font-extrabold text-slate-900 tracking-tight leading-[1.08]">

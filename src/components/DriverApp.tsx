@@ -504,10 +504,8 @@ export const DriverApp: React.FC<DriverAppProps> = ({
     }
   };
 
-  // Google Maps navigation link
-  const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${currentCoords.lat},${currentCoords.lng}&destination=${encodeURIComponent(
-    customerAddress
-  )}&travelmode=driving`;
+  // Google Maps navigation link (Production Turn-by-Turn requirement)
+  const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${customerCoords.lat},${customerCoords.lng}`;
 
   // Calculate current distance to customer
   const currentDistanceMeters = calculateHaversineDistanceMeters(
@@ -623,10 +621,11 @@ export const DriverApp: React.FC<DriverAppProps> = ({
                   href={googleMapsUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 text-xs transition-colors cursor-pointer"
+                  className="text-white bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 text-xs transition-colors cursor-pointer shadow-xs"
                 >
-                  <span>Google Maps</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
+                  <Navigation className="w-3.5 h-3.5 text-white" />
+                  <span>Navigate to Customer (Google Maps)</span>
+                  <ExternalLink className="w-3.5 h-3.5 text-blue-200" />
                 </a>
               </div>
 

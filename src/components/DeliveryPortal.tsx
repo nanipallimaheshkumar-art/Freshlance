@@ -91,7 +91,8 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({ user, onBackToSh
 
       // Check if custom cloudflare worker URL is configured
       const cfUrl = typeof window !== 'undefined' ? (localStorage.getItem('freshlane_cloudflare_url') || '').trim().replace(/\/$/, '') : '';
-      const endpoint = cfUrl ? `${cfUrl}/api/delivery/orders` : '/api/delivery/orders';
+      const driverQuery = user?.id ? `?driverId=${encodeURIComponent(user.id)}` : '';
+      const endpoint = cfUrl ? `${cfUrl}/api/delivery/orders${driverQuery}` : `/api/delivery/orders${driverQuery}`;
 
       const res = await fetch(endpoint, { headers });
       if (res.ok) {
@@ -677,6 +678,20 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({ user, onBackToSh
                           <Navigation className="w-3.5 h-3.5 text-emerald-400" />
                           <span>Start Route on Live GPS Map 🛵</span>
                         </button>
+                      )}
+
+                      {/* Action: Turn-by-Turn External Google Maps Navigation */}
+                      {!isDelivered && (
+                        <a
+                          href={`https://www.google.com/maps/dir/?api=1&destination=${order.customerCoords?.lat || 16.8165},${order.customerCoords?.lng || 81.5295}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          id={`nav-google-maps-${order.id || order.orderId}`}
+                          className="w-full py-2.5 px-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-xs"
+                        >
+                          <Navigation className="w-3.5 h-3.5 text-white" />
+                          <span>Navigate to Customer (Google Maps)</span>
+                        </a>
                       )}
 
                       {/* Action Button: Mark as Delivered with Animated Loading & Celebration Success States */}

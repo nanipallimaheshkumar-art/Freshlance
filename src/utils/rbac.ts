@@ -83,16 +83,6 @@ export function parseSessionToken(tokenString?: string | null): SessionTokenPayl
   const raw = tokenString.replace(/^Bearer\s+/i, '').trim();
   if (!raw) return null;
 
-  // Direct role string bypass for testing
-  if (raw === 'admin' || raw === 'delivery_partner' || raw === 'customer') {
-    return {
-      userId: `user-${raw}`,
-      email: `${raw}@freshlane.com`,
-      name: raw.toUpperCase(),
-      role: raw as AppRole,
-    };
-  }
-
   // Base64 decoding
   try {
     let json = '';
@@ -103,6 +93,10 @@ export function parseSessionToken(tokenString?: string | null): SessionTokenPayl
     }
     const parsed = JSON.parse(json);
     if (parsed && typeof parsed === 'object') {
+      // Check expiration if exp field exists
+      if (parsed.exp && typeof parsed.exp === 'number' && parsed.exp * 1000 < Date.now()) {
+        return null;
+      }
       return {
         userId: parsed.userId || 'usr_unknown',
         email: parsed.email || '',
@@ -113,16 +107,7 @@ export function parseSessionToken(tokenString?: string | null): SessionTokenPayl
       };
     }
   } catch {
-    // Check if token contains role keyword
-    if (raw.includes('admin')) {
-      return { userId: 'admin', email: 'admin@freshlane.com', name: 'Admin', role: 'admin' };
-    }
-    if (raw.includes('delivery') || raw.includes('driver')) {
-      return { userId: 'driver', email: 'driver@freshlane.com', name: 'Driver', role: 'delivery_partner' };
-    }
-    if (raw.includes('customer') || raw.includes('shopper')) {
-      return { userId: 'customer', email: 'customer@freshlane.com', name: 'Customer', role: 'customer' };
-    }
+    return null;
   }
 
   return null;

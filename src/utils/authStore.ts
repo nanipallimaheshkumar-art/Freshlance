@@ -588,3 +588,74 @@ export function updateDriverPassword(driverId: string, newPassword: string): boo
   }
   return true;
 }
+
+/**
+ * Updates a user's role (used by Admin to promote to delivery_partner or admin)
+ */
+export async function updateUserRole(
+  userId: string,
+  newRole: AppRole
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const users = getRegisteredUsers();
+    const target = users.find((u) => u.id === userId || u.email.toLowerCase() === userId.toLowerCase());
+    if (target) {
+      target.role = newRole;
+      saveRegisteredUsers(users);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('freshlane_users_updated'));
+      }
+    }
+
+    // Sync with backend API
+    const token = getSessionToken();
+    const cfUrl = typeof window !== 'undefined' ? (localStorage.getItem('freshlane_cloudflare_url') || '').trim().replace(/\/$/, '') : '';
+    const endpoint = cfUrl ? `${cfUrl}/api/admin/users/${userId}/role` : `/api/admin/users/${userId}/role`;
+
+    if (token) {
+      await fetch(endpoint, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          'x-session-token': token,
+        },
+        body: JSON.stringify({ role: newRole }),
+      });
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Failed to update user role' };
+  }
+}
+
+/**
+ * Fetch all registered users for Admin RBAC management
+ */
+export async function fetchAllUsers(): Promise<UserAccount[]> {
+  try {
+    const token = getSessionToken();
+    const cfUrl = typeof window !== 'undefined' ? (localStorage.getItem('freshlane_cloudflare_url') || '').trim().replace(/\/$/, '') : '';
+    const endpoint = cfUrl ? `${cfUrl}/api/admin/users` : `/api/admin/users`;
+
+    if (token) {
+      const res = await fetch(endpoint, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'x-session-token': token,
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.success && Array.isArray(data.users)) {
+          return data.users;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Could not fetch backend users:', err);
+  }
+  return getRegisteredUsers();
+}
+

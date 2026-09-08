@@ -18,6 +18,7 @@ import {
   FRESHLANE_HUB_COORDS,
   DELIVERY_MAX_RADIUS_KM,
 } from "./server/dispatchStore";
+import { PRODUCE_ITEMS } from "./src/data/produceData";
 
 const app = express();
 const PORT = 3000;
@@ -63,9 +64,9 @@ export interface ServerOrderEntity {
   customerCoords: { lat: number; lng: number };
   items: string[];
   totalAmount: number;
-  status: 'Preparing' | 'Out for Delivery' | 'Delivered';
-  driverId: string;
-  driverName: string;
+  status: 'Pending' | 'Preparing' | 'Assigned' | 'Out for Delivery' | 'Delivered';
+  driverId?: string | null;
+  driverName?: string | null;
   etaMinutes: number;
   createdAt: string;
   deliveredAt?: string;
@@ -73,6 +74,11 @@ export interface ServerOrderEntity {
 }
 
 const serverOrdersDatabase: Map<string, ServerOrderEntity> = new Map();
+
+// In-memory fresh produce catalog database
+const serverProduceDatabase: Map<string, any> = new Map(
+  PRODUCE_ITEMS.map((item) => [item.id, { ...item }])
+);
 
 // Body parser for JSON with support for base64 images up to 20MB
 app.use(express.json({ limit: "20mb" }));
@@ -753,9 +759,9 @@ app.post("/api/orders", (req, res) => {
     customerCoords,
     items,
     totalAmount,
-    status = "Out for Delivery",
-    driverId = "DRV-101",
-    driverName = "Arjun S.",
+    status = "Pending",
+    driverId = null,
+    driverName = null,
     etaMinutes = 20,
   } = req.body || {};
 
@@ -772,8 +778,8 @@ app.post("/api/orders", (req, res) => {
     items: Array.isArray(items) ? items : ["Fresh Produce Express"],
     totalAmount: Number(totalAmount) || 250,
     status: status as any,
-    driverId,
-    driverName,
+    driverId: driverId || null,
+    driverName: driverName || null,
     etaMinutes,
     createdAt: new Date().toISOString(),
   };
@@ -784,6 +790,142 @@ app.post("/api/orders", (req, res) => {
     success: true,
     order: orderEntity,
   });
+});
+
+// 4a-1. Fresh Produce Catalog API with aggressive cache prevention (GET /api/products)
+app.get("/api/products", (_req, res) => {
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  return res.json({
+    success: true,
+    products: Array.from(serverProduceDatabase.values()),
+  });
+});
+
+// 4a-2. Admin Update Product Details & Real-Time Price (PUT /api/admin/products/:id)
+app.put("/api/admin/products/:id", (req, res) => {
+  const session = extractServerSession(req);
+  if (!session || session.role !== "admin") {
+    return res.status(403).json({
+      success: false,
+      error: "Forbidden: Admin privileges required to update products",
+    });
+  }
+
+  const productId = req.params.id;
+  const existing = serverProduceDatabase.get(productId);
+  if (!existing) {
+    return res.status(404).json({ success: false, error: "Product not found" });
+  }
+
+  const { name, pricePerKg, inStockKg, isAvailableToday, organicCertified, harvestDate } = req.body || {};
+  const updated = {
+    ...existing,
+    ...(name !== undefined ? { name: String(name).trim() } : {}),
+    ...(pricePerKg !== undefined ? { pricePerKg: Number(pricePerKg) } : {}),
+    ...(inStockKg !== undefined ? { inStockKg: Number(inStockKg) } : {}),
+    ...(isAvailableToday !== undefined ? { isAvailableToday: Boolean(isAvailableToday) } : {}),
+    ...(organicCertified !== undefined ? { organicCertified: Boolean(organicCertified) } : {}),
+    ...(harvestDate !== undefined ? { harvestDate: String(harvestDate) } : {}),
+  };
+
+  serverProduceDatabase.set(productId, updated);
+  return res.json({
+    success: true,
+    product: updated,
+  });
+});
+
+// 4a-3. Admin Manual Order Assignment to Delivery Partner (PATCH /api/admin/orders/:orderId/assign)
+app.patch(["/api/admin/orders/:orderId/assign", "/api/admin/order/:orderId/assign", "/api/orders/:orderId/assign"], (req, res) => {
+  const session = extractServerSession(req);
+  if (!session || session.role !== "admin") {
+    return res.status(403).json({
+      success: false,
+      error: "Forbidden: Admin privileges required to assign orders",
+    });
+  }
+
+  const orderId = req.params.orderId;
+  const order = serverOrdersDatabase.get(orderId);
+  if (!order) {
+    return res.status(404).json({ success: false, error: "Order not found" });
+  }
+
+  const { driverId, driverName } = req.body || {};
+  if (!driverId || !driverName) {
+    return res.status(400).json({ success: false, error: "driverId and driverName are required" });
+  }
+
+  order.driverId = driverId;
+  order.driverName = driverName;
+  order.status = "Assigned";
+  serverOrdersDatabase.set(orderId, order);
+
+  return res.json({
+    success: true,
+    order,
+  });
+});
+
+// 4a-4. Admin List All Users for RBAC Management (GET /api/admin/users)
+app.get("/api/admin/users", (req, res) => {
+  const session = extractServerSession(req);
+  if (!session || session.role !== "admin") {
+    return res.status(403).json({
+      success: false,
+      error: "Forbidden: Admin privileges required to view users",
+    });
+  }
+
+  return res.json({
+    success: true,
+    users: Array.from(serverUsersDatabase.values()),
+  });
+});
+
+// 4a-5. Admin Update User RBAC Role (PATCH /api/admin/users/:userId/role)
+app.patch(["/api/admin/users/:userId/role", "/api/admin/user/:userId/role"], (req, res) => {
+  const session = extractServerSession(req);
+  if (!session || session.role !== "admin") {
+    return res.status(403).json({
+      success: false,
+      error: "Forbidden: Admin privileges required to update user roles",
+    });
+  }
+
+  const userId = req.params.userId;
+  const { role } = req.body || {};
+  if (!role || !["customer", "delivery_partner", "admin"].includes(role)) {
+    return res.status(400).json({ success: false, error: "Invalid role specified" });
+  }
+
+  let user = serverUsersDatabase.get(userId);
+  if (!user) {
+    for (const [_, val] of serverUsersDatabase.entries()) {
+      if (val.email.toLowerCase() === userId.toLowerCase()) {
+        user = val;
+        break;
+      }
+    }
+  }
+
+  if (user) {
+    user.role = role;
+    serverUsersDatabase.set(user.id, user);
+    return res.json({ success: true, user });
+  }
+
+  const newUser: ServerUserRecord = {
+    id: userId,
+    name: req.body.name || "User",
+    email: req.body.email || `${userId}@freshlane.com`,
+    role,
+    createdAt: new Date().toISOString(),
+  };
+  serverUsersDatabase.set(userId, newUser);
+  return res.json({ success: true, user: newUser });
 });
 
 // 4b. Live Orders List for Delivery Portal (GET /api/orders or /api/delivery/orders)

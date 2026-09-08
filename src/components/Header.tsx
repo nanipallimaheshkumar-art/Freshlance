@@ -33,27 +33,11 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200">
       {/* Top express banner with quick portal entry */}
-      <div className={`${isFreeDeliveryActive ? 'bg-gradient-to-r from-emerald-900 via-slate-900 to-emerald-950 text-emerald-100' : 'bg-slate-900 text-slate-300'} text-[11px] sm:text-xs font-medium py-1.5 px-3 sm:px-4 transition-colors`}>
+      <div className="bg-slate-900 text-slate-300 text-[11px] sm:text-xs font-medium py-1.5 px-3 sm:px-4">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-1.5 sm:gap-2">
           <div className="flex items-center gap-1.5 sm:gap-2 truncate">
-            {isFreeDeliveryActive ? (
-              <>
-                <span className="inline-flex items-center gap-1 bg-emerald-500 text-slate-950 text-[9px] sm:text-[10px] font-black px-1.5 sm:px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0 animate-pulse">
-                  ⚡ FLASH
-                </span>
-                <span className="text-white font-semibold truncate text-[11px] sm:text-xs">
-                  FREE DELIVERY!
-                </span>
-                <span className="bg-emerald-400/20 text-emerald-300 font-mono font-bold text-[10px] sm:text-[11px] px-1.5 py-0.5 rounded border border-emerald-400/30 shrink-0">
-                  ⏳ {formattedTime}
-                </span>
-              </>
-            ) : (
-              <>
-                <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
-                <span className="truncate text-[11px] sm:text-xs">⚡ Express in <strong className="text-white font-semibold">24–30 min</strong></span>
-              </>
-            )}
+            <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
+            <span className="truncate text-[11px] sm:text-xs">⚡ Express delivery in <strong className="text-white font-semibold">24–30 min</strong> · Free on orders over ₹299</span>
           </div>
           <div className="flex items-center gap-2 sm:gap-3 text-slate-300 text-[10px] sm:text-[11px] shrink-0">
             <span className="hidden md:inline text-emerald-400 font-medium">📍 Tadepalligudem (534102)</span>

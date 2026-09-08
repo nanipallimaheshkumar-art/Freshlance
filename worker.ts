@@ -9,6 +9,8 @@
  * - Static Assets SPA Routing
  */
 
+import { PRODUCE_ITEMS } from "./src/data/produceData";
+
 export interface Env {
   ASSETS?: { fetch: (request: Request) => Promise<Response> };
   RAZORPAY_KEY_ID?: string;
@@ -20,6 +22,11 @@ export interface Env {
   TADEPALLIGUDEM_HUB_LNG?: string;
   DELIVERY_MAX_RADIUS_KM?: string;
 }
+
+// In-memory fresh produce catalog database for worker runtime
+const workerProduceDatabase: Map<string, any> = new Map(
+  PRODUCE_ITEMS.map((item) => [item.id, { ...item }])
+);
 
 // Tadepalligudem Hub Configuration (534102)
 const FRESHLANE_HUB = {
@@ -125,9 +132,9 @@ export interface WorkerOrderEntity {
   customerCoords: { lat: number; lng: number };
   items: string[];
   totalAmount: number;
-  status: 'Preparing' | 'Out for Delivery' | 'Delivered';
-  driverId: string;
-  driverName: string;
+  status: 'Pending' | 'Preparing' | 'Assigned' | 'Out for Delivery' | 'Delivered';
+  driverId?: string | null;
+  driverName?: string | null;
   etaMinutes: number;
   createdAt: string;
   deliveredAt?: string;
@@ -318,7 +325,7 @@ function enforceWorkerRbac(request: Request, url: URL): Response | null {
   if (!path.startsWith("/api/")) return null;
 
   // Public utility endpoints that do not require auth credentials
-  if (path === "/api/health" || path.startsWith("/api/auth/")) {
+  if (path === "/api/health" || path === "/api/products" || path.startsWith("/api/auth/")) {
     return null;
   }
 
@@ -795,9 +802,9 @@ export default {
           customerCoords: body.customerCoords || { lat: 16.8165, lng: 81.5295 },
           items: Array.isArray(body.items) ? body.items : ["Fresh Produce Express"],
           totalAmount: Number(body.totalAmount) || 250,
-          status: body.status || "Out for Delivery",
-          driverId: body.driverId || "DRV-101",
-          driverName: body.driverName || "Arjun S.",
+          status: body.status || "Pending",
+          driverId: body.driverId || null,
+          driverName: body.driverName || null,
           etaMinutes: body.etaMinutes || 20,
           createdAt: new Date().toISOString(),
         };
@@ -807,6 +814,178 @@ export default {
       } catch {
         return jsonResponse({ error: "Invalid JSON payload" }, 400);
       }
+    }
+
+    // 5a-1. Fresh Produce Catalog API with aggressive cache prevention (GET /api/products)
+    if (url.pathname === "/api/products" && request.method === "GET") {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          products: Array.from(workerProduceDatabase.values()),
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+          },
+        }
+      );
+    }
+
+    // 5a-2. Admin Update Product Details & Real-Time Price (PUT /api/admin/products/:id)
+    const productUpdateMatch = url.pathname.match(/^\/api\/admin\/products\/([^/]+)$/);
+    if (productUpdateMatch && request.method === "PUT") {
+      const session = extractSessionFromWorkerRequest(request, url);
+      if (!session || session.role !== "admin") {
+        return jsonResponse(
+          { success: false, error: "Forbidden: Admin privileges required to update products" },
+          403
+        );
+      }
+
+      const productId = productUpdateMatch[1];
+      const existing = workerProduceDatabase.get(productId);
+      if (!existing) {
+        return jsonResponse({ success: false, error: "Product not found" }, 404);
+      }
+
+      let body: any = {};
+      try {
+        body = await request.json();
+      } catch {
+        return jsonResponse({ success: false, error: "Invalid JSON payload" }, 400);
+      }
+
+      const { name, pricePerKg, inStockKg, isAvailableToday, organicCertified, harvestDate } = body;
+      const updated = {
+        ...existing,
+        ...(name !== undefined ? { name: String(name).trim() } : {}),
+        ...(pricePerKg !== undefined ? { pricePerKg: Number(pricePerKg) } : {}),
+        ...(inStockKg !== undefined ? { inStockKg: Number(inStockKg) } : {}),
+        ...(isAvailableToday !== undefined ? { isAvailableToday: Boolean(isAvailableToday) } : {}),
+        ...(organicCertified !== undefined ? { organicCertified: Boolean(organicCertified) } : {}),
+        ...(harvestDate !== undefined ? { harvestDate: String(harvestDate) } : {}),
+      };
+
+      workerProduceDatabase.set(productId, updated);
+      return jsonResponse({ success: true, product: updated });
+    }
+
+    // 5a-3. Admin Manual Order Assignment to Delivery Partner (PATCH /api/admin/orders/:orderId/assign)
+    const assignMatch = url.pathname.match(/^\/api\/(?:admin\/)?orders?\/([^/]+)\/assign$/);
+    if (assignMatch && (request.method === "PATCH" || request.method === "PUT")) {
+      const session = extractSessionFromWorkerRequest(request, url);
+      if (!session || session.role !== "admin") {
+        return jsonResponse(
+          { success: false, error: "Forbidden: Admin privileges required to assign orders" },
+          403
+        );
+      }
+
+      const orderId = assignMatch[1];
+      const order = workerOrdersDatabase.get(orderId);
+      if (!order) {
+        return jsonResponse({ success: false, error: "Order not found" }, 404);
+      }
+
+      let body: any = {};
+      try {
+        body = await request.json();
+      } catch {
+        return jsonResponse({ success: false, error: "Invalid JSON payload" }, 400);
+      }
+
+      const { driverId, driverName } = body;
+      if (!driverId || !driverName) {
+        return jsonResponse({ success: false, error: "driverId and driverName are required" }, 400);
+      }
+
+      order.driverId = driverId;
+      order.driverName = driverName;
+      order.status = "Assigned";
+      workerOrdersDatabase.set(orderId, order);
+
+      return jsonResponse({ success: true, order });
+    }
+
+    // 5a-4. Admin List All Users for RBAC Management (GET /api/admin/users)
+    if (url.pathname === "/api/admin/users" && request.method === "GET") {
+      const session = extractSessionFromWorkerRequest(request, url);
+      if (!session || session.role !== "admin") {
+        return jsonResponse(
+          { success: false, error: "Forbidden: Admin privileges required to view users" },
+          403
+        );
+      }
+
+      const users = [
+        {
+          id: "admin-mahesh",
+          name: "Mahesh Kumar",
+          email: "nanipallimaheshkumar@gmail.com",
+          phone: "+91 99001 12233",
+          role: "admin",
+          createdAt: "2025-01-01T00:00:00.000Z",
+        },
+        {
+          id: "DRV-101",
+          name: "Arjun S.",
+          email: "arjun@freshlane.com",
+          phone: "+91 98450 12345",
+          role: "delivery_partner",
+          createdAt: "2025-01-02T00:00:00.000Z",
+        },
+        {
+          id: "DRV-102",
+          name: "Kiran R.",
+          email: "kiran@freshlane.com",
+          phone: "+91 99002 67890",
+          role: "delivery_partner",
+          createdAt: "2025-01-03T00:00:00.000Z",
+        },
+        {
+          id: "user-demo-1",
+          name: "Riya Sharma",
+          email: "riya@example.com",
+          phone: "+91 98765 43210",
+          role: "customer",
+          createdAt: "2025-01-05T00:00:00.000Z",
+        },
+      ];
+
+      return jsonResponse({ success: true, users });
+    }
+
+    // 5a-5. Admin Update User RBAC Role (PATCH /api/admin/users/:userId/role)
+    const roleMatch = url.pathname.match(/^\/api\/admin\/users?\/([^/]+)\/role$/);
+    if (roleMatch && (request.method === "PATCH" || request.method === "PUT")) {
+      const session = extractSessionFromWorkerRequest(request, url);
+      if (!session || session.role !== "admin") {
+        return jsonResponse(
+          { success: false, error: "Forbidden: Admin privileges required to update user roles" },
+          403
+        );
+      }
+
+      const userId = roleMatch[1];
+      let body: any = {};
+      try {
+        body = await request.json();
+      } catch {
+        return jsonResponse({ success: false, error: "Invalid JSON payload" }, 400);
+      }
+
+      const { role } = body;
+      if (!role || !["customer", "delivery_partner", "admin"].includes(role)) {
+        return jsonResponse({ success: false, error: "Invalid role specified" }, 400);
+      }
+
+      return jsonResponse({
+        success: true,
+        user: { id: userId, role },
+      });
     }
 
     // 5b. Live Orders List for Delivery Portal (GET /api/orders or /api/delivery/orders)
