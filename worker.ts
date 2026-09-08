@@ -339,13 +339,42 @@ function enforceWorkerRbac(request: Request, url: URL): Response | null {
     return null; // Master key bypass!
   }
 
+  const isOrderCreationEndpoint =
+    (path === "/api/orders" || path === "/api/checkout" || path === "/api/create-order") &&
+    request.method === "POST";
+
+  // STRICT ORDER & CHECKOUT ENDPOINT PROTECTION (Requirement 3):
+  // If session token is missing, invalid, or expired, immediately return 401 Unauthorized and block order creation.
+  if (isOrderCreationEndpoint) {
+    if (!session) {
+      return jsonResponse(
+        {
+          success: false,
+          error: "401 Unauthorized: A valid session token is required to process checkout or create an order.",
+        },
+        401
+      );
+    }
+    if (session.role === "delivery_partner") {
+      return jsonResponse(
+        {
+          success: false,
+          error: "Forbidden: Delivery partner accounts cannot create customer orders.",
+          role: session.role,
+        },
+        403
+      );
+    }
+    return null;
+  }
+
   // Classification of endpoints
   const isAdminEndpoint = path.startsWith("/api/admin") || path === "/api/drivers";
   const isDeliveryEndpoint =
     path.startsWith("/api/delivery") ||
     path.includes("/deliver") ||
     path === "/api/driver/location" ||
-    path === "/api/orders";
+    (path === "/api/orders" && request.method === "GET");
 
   // -------------------------------------------------------------------------
   // RULE 2: Delivery Partner Access (Restricted)
@@ -674,7 +703,18 @@ export default {
     }
 
     // 3. Create Razorpay Order
-    if (url.pathname === "/api/create-order" && request.method === "POST") {
+    if ((url.pathname === "/api/create-order" || url.pathname === "/api/checkout/create-order") && request.method === "POST") {
+      const session = extractSessionFromWorkerRequest(request, url);
+      if (!session) {
+        return jsonResponse(
+          {
+            success: false,
+            error: "401 Unauthorized: Valid session token is required in request headers to create an order.",
+          },
+          401
+        );
+      }
+
       try {
         const body = (await request.json()) as any;
         const { amount, currency = "INR", receipt, coords, address, pincode } = body;
@@ -786,8 +826,19 @@ export default {
       });
     }
 
-    // 5a. Create / Sync New Live Order (POST /api/orders)
-    if (url.pathname === "/api/orders" && request.method === "POST") {
+    // 5a. Create / Sync New Live Order (POST /api/orders or POST /api/checkout)
+    if ((url.pathname === "/api/orders" || url.pathname === "/api/checkout") && request.method === "POST") {
+      const session = extractSessionFromWorkerRequest(request, url);
+      if (!session) {
+        return jsonResponse(
+          {
+            success: false,
+            error: "401 Unauthorized: Valid session token is required in request headers to submit an order.",
+          },
+          401
+        );
+      }
+
       try {
         const body = (await request.json()) as any;
         if (!body || !body.id) {

@@ -424,6 +424,28 @@ app.use((req, res, next) => {
     return next();
   }
 
+  const isOrderCreationEndpoint =
+    (p === "/api/orders" || p === "/api/checkout" || p === "/api/create-order") &&
+    req.method === "POST";
+
+  // STRICT ORDER & CHECKOUT ENDPOINT PROTECTION:
+  // If session token is missing, invalid, or expired, immediately return 401 Unauthorized and block order creation.
+  if (isOrderCreationEndpoint) {
+    if (!session) {
+      return res.status(401).json({
+        success: false,
+        error: "401 Unauthorized: Valid session token is required to process checkout or create an order.",
+      });
+    }
+    if (session.role === "delivery_partner") {
+      return res.status(403).json({
+        success: false,
+        error: "Forbidden: Delivery partner accounts cannot create customer orders.",
+      });
+    }
+    return next();
+  }
+
   const isAdminEndpoint = p.startsWith("/api/admin") || p === "/api/drivers";
   const isDeliveryEndpoint =
     p.startsWith("/api/delivery") ||
@@ -544,7 +566,16 @@ app.post("/api/delivery/check-range", (req, res) => {
 // --- Razorpay Payment Gateway Endpoints ---
 
 // 1. Create Order: Calls Razorpay orders API and returns order_id, amount, and currency
-app.post("/api/create-order", async (req, res) => {
+app.post(["/api/create-order", "/api/checkout/create-order"], async (req, res) => {
+  // Strict session token validation
+  const session = extractServerSession(req);
+  if (!session) {
+    return res.status(401).json({
+      success: false,
+      error: "401 Unauthorized: Valid session token is required in request headers to create an order.",
+    });
+  }
+
   try {
     const { amount, currency = "INR", receipt, coords, address, pincode } = req.body;
 
@@ -749,8 +780,17 @@ app.post("/api/driver/status", (req, res) => {
   return res.json(result);
 });
 
-// 4a. Create / Sync New Live Order (POST /api/orders)
-app.post("/api/orders", (req, res) => {
+// 4a. Create / Sync New Live Order (POST /api/orders or POST /api/checkout)
+app.post(["/api/orders", "/api/checkout"], (req, res) => {
+  // Strict session token validation
+  const session = extractServerSession(req);
+  if (!session) {
+    return res.status(401).json({
+      success: false,
+      error: "401 Unauthorized: Valid session token is required in request headers to submit an order.",
+    });
+  }
+
   const {
     id,
     customerName,

@@ -129,6 +129,15 @@ export default function App() {
         try {
           window.history.pushState({}, '', '/delivery');
         } catch {}
+      } else if (guard.redirectTo === '/login') {
+        // Enforce checkout route guard: Save return URL and route to login
+        sessionStorage.setItem('freshlane_return_url', '/checkout');
+        setActiveWeb('customer');
+        setCurrentTab('login');
+        setIsCheckoutOpen(false);
+        try {
+          window.history.pushState({}, '', '/login');
+        } catch {}
       } else {
         setActiveWeb('customer');
         setCurrentTab('shop');
@@ -146,6 +155,16 @@ export default function App() {
         window.history.pushState({}, '', '/login');
       } catch {}
     } else if (targetRoute === 'checkout') {
+      if (!user) {
+        sessionStorage.setItem('freshlane_return_url', '/checkout');
+        setActiveWeb('customer');
+        setCurrentTab('login');
+        showToast('Please log in with OTP to access checkout.');
+        try {
+          window.history.pushState({}, '', '/login');
+        } catch {}
+        return;
+      }
       setActiveWeb('customer');
       setIsCheckoutOpen(true);
     } else {
@@ -207,6 +226,15 @@ export default function App() {
           try {
             window.history.replaceState({}, '', '/delivery');
           } catch {}
+        } else if (guard.redirectTo === '/login') {
+          // Direct URL navigation to /checkout or /payment by unauthenticated guest
+          sessionStorage.setItem('freshlane_return_url', '/checkout');
+          setActiveWeb('customer');
+          setCurrentTab('login');
+          setIsCheckoutOpen(false);
+          try {
+            window.history.replaceState({}, '', '/login');
+          } catch {}
         } else {
           setActiveWeb('customer');
           setCurrentTab('shop');
@@ -221,6 +249,15 @@ export default function App() {
       if (targetRoute === 'login') {
         setCurrentTab('login');
       } else if (targetRoute === 'checkout') {
+        if (!user) {
+          sessionStorage.setItem('freshlane_return_url', '/checkout');
+          setCurrentTab('login');
+          showToast('Please log in with OTP to access checkout.');
+          try {
+            window.history.replaceState({}, '', '/login');
+          } catch {}
+          return;
+        }
         setIsCheckoutOpen(true);
       }
     };
@@ -317,6 +354,24 @@ export default function App() {
   const handleCustomerLoginSuccess = (signedInUser: UserAccount) => {
     setUser(signedInUser);
     showToast(`Welcome back, ${signedInUser.name.split(' ')[0]}!`);
+
+    // Seamless UX: Return to checkout if customer was forced to log in
+    const returnUrl = sessionStorage.getItem('freshlane_return_url');
+    if (
+      returnUrl === '/checkout' ||
+      returnUrl === '/payment' ||
+      returnUrl === 'checkout' ||
+      returnUrl === 'payment'
+    ) {
+      sessionStorage.removeItem('freshlane_return_url');
+      setCurrentTab('shop');
+      setIsCheckoutOpen(true);
+      try {
+        window.history.pushState({}, '', '/checkout');
+      } catch {}
+      return;
+    }
+
     setCurrentTab('shop');
   };
 
@@ -329,6 +384,24 @@ export default function App() {
   const handleRegisterSuccess = (newUser: UserAccount) => {
     setUser(newUser);
     showToast(`Account created! Welcome to FreshLane, ${newUser.name.split(' ')[0]}!`);
+
+    // Seamless UX: Return to checkout if customer registered during checkout flow
+    const returnUrl = sessionStorage.getItem('freshlane_return_url');
+    if (
+      returnUrl === '/checkout' ||
+      returnUrl === '/payment' ||
+      returnUrl === 'checkout' ||
+      returnUrl === 'payment'
+    ) {
+      sessionStorage.removeItem('freshlane_return_url');
+      setCurrentTab('shop');
+      setIsCheckoutOpen(true);
+      try {
+        window.history.pushState({}, '', '/checkout');
+      } catch {}
+      return;
+    }
+
     setCurrentTab('shop');
   };
 
@@ -639,8 +712,17 @@ export default function App() {
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
         items={cartItems}
+        user={user}
         onUpdateQty={handleUpdateQty}
         onRemoveItem={handleRemoveItem}
+        onPromptLogin={() => {
+          setIsCartOpen(false);
+          setCurrentTab('login');
+          showToast('Please log in with OTP to proceed to checkout.');
+          try {
+            window.history.pushState({}, '', '/login');
+          } catch {}
+        }}
         onCheckout={() => {
           setIsCartOpen(false);
           setIsCheckoutOpen(true);

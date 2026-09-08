@@ -1,24 +1,28 @@
 import React from 'react';
-import { X, Plus, Minus, Trash2, ArrowRight, Sparkles, Clock, ShieldCheck, Zap } from 'lucide-react';
-import { CartItem } from '../types';
+import { X, Plus, Minus, Trash2, ArrowRight, Sparkles, Clock, ShieldCheck, Zap, Lock } from 'lucide-react';
+import { CartItem, UserAccount } from '../types';
 import { useFreeDeliveryPromotion } from '../utils/freeDeliveryPromo';
 
 interface CartDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   items: CartItem[];
+  user?: UserAccount | null;
   onUpdateQty: (id: string, delta: number) => void;
   onRemoveItem: (id: string) => void;
   onCheckout: () => void;
+  onPromptLogin?: () => void;
 }
 
 export const CartDrawer: React.FC<CartDrawerProps> = ({
   isOpen,
   onClose,
   items,
+  user,
   onUpdateQty,
   onRemoveItem,
   onCheckout,
+  onPromptLogin,
 }) => {
   const { isFreeDeliveryActive, formattedTime, calculateDeliveryFee } = useFreeDeliveryPromotion();
 
@@ -28,6 +32,22 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const deliveryFee = calculateDeliveryFee(subtotal);
   const grandTotal = subtotal + deliveryFee;
   const itemCount = items.reduce((sum, item) => sum + item.qty, 0);
+
+  const handleProceedToCheckout = () => {
+    if (!user) {
+      // 1. Save intended destination to session storage for post-login return
+      sessionStorage.setItem('freshlane_return_url', '/checkout');
+      // 2. Close cart drawer
+      onClose();
+      // 3. Prompt user to authenticate
+      if (onPromptLogin) {
+        onPromptLogin();
+      }
+      return;
+    }
+    // 4. Authenticated user proceeds directly to checkout and payment
+    onCheckout();
+  };
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden">
@@ -199,12 +219,29 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               </div>
 
               <button
-                onClick={onCheckout}
+                id="cart-proceed-checkout-btn"
+                onClick={handleProceedToCheckout}
                 className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
               >
-                <span>Proceed to 30-Min Delivery Checkout</span>
-                <ArrowRight className="w-4 h-4" />
+                {user ? (
+                  <>
+                    <span>Proceed to 30-Min Delivery Checkout</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                ) : (
+                  <>
+                    <Lock className="w-3.5 h-3.5" />
+                    <span>Sign In with OTP to Checkout</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
+              {!user && (
+                <p className="text-[10px] text-center text-slate-500 mt-1.5 flex items-center justify-center gap-1">
+                  <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                  <span>Authentication required before checkout. Your cart will be saved.</span>
+                </p>
+              )}
             </div>
           )}
         </div>

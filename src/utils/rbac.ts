@@ -153,8 +153,17 @@ export function parseCurrentRoute(pathname: string, hash: string): AppRoute {
     return 'login';
   }
 
-  // Checkout route
-  if (p === '/checkout' || h === '#checkout' || h === '#/checkout') {
+  // Checkout and Payment routes
+  if (
+    p === '/checkout' ||
+    p === '/payment' ||
+    p.startsWith('/checkout') ||
+    p.startsWith('/payment') ||
+    h === '#checkout' ||
+    h === '#/checkout' ||
+    h === '#payment' ||
+    h === '#/payment'
+  ) {
     return 'checkout';
   }
 
@@ -183,11 +192,11 @@ export interface RouteGuardEvaluation {
  * 1. Admin (Master Key): Allowed on ALL routes (storefront, shop, checkout, admin, delivery, login).
  * 2. Delivery Partner (Restricted): ONLY allowed on 'delivery' (and 'login').
  *    Visiting storefront, shop, checkout, or admin redirects immediately to '/delivery'.
- * 3. Unauthenticated User: Can access customer storefront, shop, checkout, login.
- *    If accessing '/admin' or '/delivery', routed to dedicated Portal Login screen (No automatic access).
- * 4. Customer (Standard): ONLY allowed on storefront, shop, checkout, login.
- *    If attempting to access '/admin' or '/delivery', denied with:
- *    'Access Denied: You do not have permission to access this portal.'
+ * 3. Unauthenticated User: Can access customer storefront, shop, login.
+ *    - Accessing '/checkout' or '/payment' is STRICTLY BLOCKED and redirected to '/login'
+ *    - If accessing '/admin' or '/delivery', routed to dedicated Portal Login screen.
+ * 4. Customer (Standard): Allowed on storefront, shop, checkout, login.
+ *    - Blocked from '/admin' or '/delivery' with 'Access Denied'.
  */
 export function evaluateRouteGuard(
   userRole: AppRole | null,
@@ -219,13 +228,23 @@ export function evaluateRouteGuard(
     };
   }
 
-  // 3. Unauthenticated Guest: Clicking Admin or Delivery routes shows dedicated Portal Login
+  // 3. Unauthenticated Guest:
   if (userRole === null) {
     if (route === 'admin' || route === 'delivery') {
       return {
         allowed: true,
         targetRoute: route,
         requiresPortalLogin: true,
+      };
+    }
+    // Strict Checkout Route Guard: Guest cannot access /checkout or /payment
+    if (route === 'checkout') {
+      return {
+        allowed: false,
+        redirectTo: '/login',
+        targetRoute: 'login',
+        deniedReason: 'Authentication required. Please sign in or verify OTP before accessing checkout.',
+        notificationMessage: 'Please log in with OTP to access checkout.',
       };
     }
     return {
@@ -259,10 +278,12 @@ export function evaluateRouteGuard(
  * 2. Delivery Partner: role === 'delivery_partner' can ONLY call /api/delivery/* endpoints.
  *    If calling customer or admin endpoint -> 403 Forbidden.
  * 3. Customer: role === 'customer' is blocked (403 Forbidden) from hitting any admin or delivery API endpoints.
+ * 4. Order Creation / Checkout: STRICTLY requires valid authenticated session. Unauthenticated -> 401 Unauthorized.
  */
 export function evaluateApiAccess(
   role: AppRole | null,
-  pathname: string
+  pathname: string,
+  method: string = 'GET'
 ): { allowed: boolean; status?: number; error?: string } {
   // 1. Admin: Master Key
   if (role === 'admin') {
@@ -274,10 +295,23 @@ export function evaluateApiAccess(
   const isDeliveryEndpoint =
     path.startsWith('/api/delivery') ||
     path.includes('/deliver') ||
-    path === '/api/orders' ||
+    (path === '/api/orders' && method === 'GET') ||
     path === '/api/driver/location';
 
-  // 2. Delivery Partner: ONLY /api/delivery/* allowed
+  const isOrderCreationEndpoint =
+    (path === '/api/orders' || path === '/api/checkout' || path === '/api/create-order') &&
+    method.toUpperCase() === 'POST';
+
+  // 2. Unauthenticated requests on Order / Payment endpoints -> 401 Unauthorized
+  if (!role && isOrderCreationEndpoint) {
+    return {
+      allowed: false,
+      status: 401,
+      error: '401 Unauthorized: Valid session token is required to create an order or proceed to payment.',
+    };
+  }
+
+  // 3. Delivery Partner: ONLY /api/delivery/* allowed
   if (role === 'delivery_partner') {
     if (isDeliveryEndpoint) {
       return { allowed: true };
@@ -290,7 +324,7 @@ export function evaluateApiAccess(
     };
   }
 
-  // 3. Customer: Blocked from admin and delivery endpoints
+  // 4. Customer: Blocked from admin and delivery endpoints
   if (role === 'customer') {
     if (isAdminEndpoint || isDeliveryEndpoint) {
       return {

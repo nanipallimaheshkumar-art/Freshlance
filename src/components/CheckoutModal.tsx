@@ -25,7 +25,7 @@ import { checkDeliveryEligibility, DeliveryEligibilityResult, TADEPALLIGUDEM_ZON
 import { useFreeDeliveryPromotion } from '../utils/freeDeliveryPromo';
 import { normalizeRole } from '../utils/rbac';
 import { safeResponseJson } from '../utils/safeFetch';
-import { setCurrentSession, authenticateUser } from '../utils/authStore';
+import { setCurrentSession, authenticateUser, getSessionToken } from '../utils/authStore';
 
 function decodeFallback(b64: string): string {
   try {
@@ -361,10 +361,19 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       etaMinutes: 25,
     };
 
-    // Post to express backend
+    // Post to express backend with authenticated session token
+    const token = currentUser?.token || getSessionToken();
+    const orderHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (token) {
+      orderHeaders['Authorization'] = `Bearer ${token}`;
+      orderHeaders['x-session-token'] = token;
+    }
+
     fetch('/api/orders', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: orderHeaders,
       body: JSON.stringify(liveOrderPayload),
     }).catch((err) => console.warn('Sync order to /api/orders caught:', err));
 
@@ -373,7 +382,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       const base = cloudflareWorkerUrl.trim().replace(/\/$/, '');
       fetch(`${base}/api/orders`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: orderHeaders,
         body: JSON.stringify(liveOrderPayload),
       }).catch((err) => console.warn('Sync order to worker caught:', err));
     }
@@ -424,11 +433,18 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       const createOrderEndpoint = apiBase ? `${apiBase}/api/create-order` : '/api/create-order';
       const verifyPaymentEndpoint = apiBase ? `${apiBase}/api/verify-payment` : '/api/verify-payment';
 
+      const token = currentUser?.token || getSessionToken();
+      const requestHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        requestHeaders['Authorization'] = `Bearer ${token}`;
+        requestHeaders['x-session-token'] = token;
+      }
+
       const createOrderRes = await fetch(createOrderEndpoint, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: requestHeaders,
         body: JSON.stringify({
           amount: amountPaise,
           currency: 'INR',
