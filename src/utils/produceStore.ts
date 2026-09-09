@@ -293,7 +293,7 @@ export async function updateRemoteProduct(
   id: string,
   updates: Partial<ProduceItem>,
   sessionToken?: string
-): Promise<{ success: boolean; product?: ProduceItem; error?: string }> {
+): Promise<{ success: boolean; product?: ProduceItem; broadcasted?: boolean; error?: string }> {
   try {
     const base = getApiBase();
     const endpoint = base ? `${base}/api/admin/products/${id}` : `/api/admin/products/${id}`;
@@ -313,8 +313,8 @@ export async function updateRemoteProduct(
     if (res.ok && data?.success && data?.product) {
       const catalog = getProduceCatalog();
       const updated = catalog.map((p) => (p.id === id ? { ...p, ...data.product } : p));
-      saveCatalog(updated, data.version || currentLocalVersion + 1);
-      return { success: true, product: data.product };
+      saveCatalog(updated, data.version || currentLocalVersion + 1, true);
+      return { success: true, product: data.product, broadcasted: Boolean(data.broadcasted) };
     }
 
     return { success: false, error: data?.error || 'Failed to update product' };
@@ -388,12 +388,58 @@ export async function deleteRemoteProduct(
 
 /**
  * Global Real-Time Sync Coordinator:
- * - Active devices: polls version every 3 seconds
+ * - Real-Time Server-Sent Events (SSE) stream for instant sub-second price/stock updates
+ * - Multi-Tab BroadcastChannel & Storage Event synchronization
+ * - Active devices: polls version every 4 seconds as a fallback
  * - Inactive devices: immediately refreshes when user wakes phone, unlocks screen, or switches to tab (visibilitychange / focus)
  * - Connection restoration: immediately refreshes when device comes online
  */
 let syncIntervalId: any = null;
 let isSyncInitialized = false;
+let catalogEventSource: EventSource | null = null;
+
+function setupCatalogEventSource() {
+  if (typeof window === 'undefined' || typeof EventSource === 'undefined') return;
+  if (catalogEventSource) {
+    try {
+      catalogEventSource.close();
+    } catch {}
+    catalogEventSource = null;
+  }
+
+  try {
+    const base = getApiBase();
+    const streamUrl = base ? `${base}/api/products/stream` : '/api/products/stream';
+    const es = new EventSource(streamUrl);
+    catalogEventSource = es;
+
+    es.onmessage = (event) => {
+      try {
+        if (!event.data || event.data.trim() === '' || event.data.startsWith(':')) return;
+        const payload = JSON.parse(event.data);
+        if (payload && Array.isArray(payload.catalog) && payload.catalog.length > 0) {
+          const newVer = typeof payload.version === 'number' ? payload.version : currentLocalVersion + 1;
+          saveCatalog(payload.catalog, newVer, true);
+        } else if (payload && payload.product) {
+          const existing = getProduceCatalog();
+          const updated = existing.map((p) => (p.id === payload.product.id ? { ...p, ...payload.product } : p));
+          const newVer = typeof payload.version === 'number' ? payload.version : currentLocalVersion + 1;
+          saveCatalog(updated, newVer, true);
+        }
+      } catch (err) {
+        console.warn('[ProduceStream] Failed to parse SSE message:', err);
+      }
+    };
+
+    es.onerror = () => {
+      if (es.readyState === EventSource.CLOSED) {
+        catalogEventSource = null;
+      }
+    };
+  } catch (err) {
+    console.warn('[ProduceStream] EventSource initialization notice:', err);
+  }
+}
 
 export function initCatalogSync(): () => void {
   if (typeof window === 'undefined') return () => {};
@@ -403,33 +449,49 @@ export function initCatalogSync(): () => void {
   // 1. Initial fetch when application opens
   fetchRemoteCatalog();
 
-  // 2. Poll every 3 seconds for active devices
+  // 2. Real-time sub-second SSE connection
+  setupCatalogEventSource();
+
+  // 3. Fallback poll every 4 seconds for active devices
   syncIntervalId = setInterval(() => {
     checkCatalogVersionAndSync();
-  }, 3000);
+  }, 4000);
 
-  // 3. When an inactive device re-opens / user returns to tab
+  // 4. When an inactive device re-opens / user returns to tab
   const handleVisibilityChange = () => {
     if (document.visibilityState === 'visible') {
       fetchRemoteCatalog();
+      if (!catalogEventSource || catalogEventSource.readyState === EventSource.CLOSED) {
+        setupCatalogEventSource();
+      }
     }
   };
   document.addEventListener('visibilitychange', handleVisibilityChange);
 
-  // 4. When window/app gains focus
+  // 5. When window/app gains focus
   const handleFocus = () => {
     fetchRemoteCatalog();
+    if (!catalogEventSource || catalogEventSource.readyState === EventSource.CLOSED) {
+      setupCatalogEventSource();
+    }
   };
   window.addEventListener('focus', handleFocus);
 
-  // 5. When internet reconnects
+  // 6. When internet reconnects
   const handleOnline = () => {
     fetchRemoteCatalog();
+    setupCatalogEventSource();
   };
   window.addEventListener('online', handleOnline);
 
   return () => {
     if (syncIntervalId) clearInterval(syncIntervalId);
+    if (catalogEventSource) {
+      try {
+        catalogEventSource.close();
+      } catch {}
+      catalogEventSource = null;
+    }
     document.removeEventListener('visibilitychange', handleVisibilityChange);
     window.removeEventListener('focus', handleFocus);
     window.removeEventListener('online', handleOnline);

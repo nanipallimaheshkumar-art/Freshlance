@@ -14,10 +14,12 @@ import {
   Crosshair, 
   Search,
   ExternalLink,
-  Info
+  Info,
+  LogOut,
+  Store
 } from 'lucide-react';
 import { calculateHaversineDistanceMeters, formatDistanceDisplay } from '../utils/haversine';
-import { getSessionToken, getCurrentSession } from '../utils/authStore';
+import { getSessionToken, getCurrentSession, clearCurrentSession } from '../utils/authStore';
 import { normalizeRole } from '../utils/rbac';
 import { MarkAsDeliveredButton, LoadingStage } from './MarkAsDeliveredButton';
 import { DriverApp } from './DriverApp';
@@ -349,16 +351,10 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({ user, onBackToSh
             {onBackToShop && (
               <button
                 onClick={() => {
-                  const s = getCurrentSession();
-                  const r = normalizeRole(s?.role);
-                  if (r === 'delivery_partner') {
-                    alert('Access Restricted: Delivery partners can ONLY access the /delivery portal.');
-                    return;
-                  }
                   onBackToShop();
                 }}
                 className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
-                title="Back to Customer Shop / Admin Dashboard"
+                title="Back to Customer Shop"
               >
                 <ArrowLeft className="w-5 h-5" />
               </button>
@@ -378,7 +374,7 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({ user, onBackToSh
                   </span>
                 ) : (
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-sky-500/20 text-sky-300 border border-sky-500/30">
-                    Delivery Partner Restricted
+                    Delivery Partner
                   </span>
                 )}
               </div>
@@ -388,8 +384,34 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({ user, onBackToSh
             </div>
           </div>
 
-          {/* GPS telemetry status & Refresh */}
+          {/* Quick Portal Switcher & GPS telemetry status & Refresh */}
           <div className="flex items-center gap-2">
+            {onBackToShop && (
+              <button
+                onClick={onBackToShop}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 text-xs font-bold transition-colors cursor-pointer"
+                title="Switch to Customer Storefront"
+              >
+                <Store className="w-3.5 h-3.5" />
+                <span>Customer Store</span>
+              </button>
+            )}
+
+            <button
+              onClick={() => {
+                clearCurrentSession();
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(new CustomEvent('freshlane-auth-change', { detail: null }));
+                }
+                if (onBackToShop) onBackToShop();
+              }}
+              className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/20 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Sign out of delivery account"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Sign Out</span>
+            </button>
+
             <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700 text-xs">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
               <span className="text-slate-300 font-mono text-[11px]">GPS: {gpsWatchStatus}</span>

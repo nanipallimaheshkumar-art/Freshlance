@@ -26,7 +26,8 @@ import {
   MapPin,
   UserCheck,
   Eye,
-  EyeOff
+  EyeOff,
+  Radio,
 } from 'lucide-react';
 import { UserAccount, ProduceItem, OrderRecord } from '../types';
 import {
@@ -255,7 +256,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ user, onGoToShop
     if (!editingProduct) return;
     setIsSavingProduct(true);
     try {
-      await updateRemoteProduct(editingProduct.id, {
+      const res = await updateRemoteProduct(editingProduct.id, {
         name: editName,
         price: editPrice,
         pricePerKg: editPrice,
@@ -264,7 +265,11 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ user, onGoToShop
         organicCertified: editOrganic,
       });
       setProduceList(getProduceCatalog());
-      showToast(`Updated "${editName}" details & stock!`);
+      if (res.success) {
+        showToast(`Updated "${editName}"! Broadcasted live to all connected devices.`);
+      } else {
+        showToast(`Error: ${res.error || 'Failed to update product'}`);
+      }
       setEditingProduct(null);
     } catch (err: any) {
       showToast(`Error saving product: ${err?.message || 'Failed'}`);
@@ -1235,6 +1240,15 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ user, onGoToShop
                 </label>
               </div>
 
+              {/* Live Broadcast Indicator */}
+              <div className="flex items-start gap-2.5 p-3 rounded-xl bg-sky-50/90 border border-sky-200/80 text-sky-950 text-[11px] leading-relaxed">
+                <Radio className="w-4 h-4 text-sky-600 shrink-0 mt-0.5 animate-pulse" />
+                <div>
+                  <strong className="font-bold text-sky-900 block">Instant Global Broadcast:</strong>
+                  Saving updates the database and immediately broadcasts price (₹{editPrice}/{editingProduct.unit}) and stock changes across every connected customer device via real-time SSE stream.
+                </div>
+              </div>
+
               {/* Buttons */}
               <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
                 <button
@@ -1247,10 +1261,19 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ user, onGoToShop
                 <button
                   type="submit"
                   disabled={isSavingProduct}
-                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer flex items-center gap-2 disabled:opacity-50"
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer flex items-center gap-2 disabled:opacity-50 transition-all"
                 >
-                  {isSavingProduct && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-                  <span>Save Changes</span>
+                  {isSavingProduct ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Broadcasting to Devices...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Radio className="w-3.5 h-3.5" />
+                      <span>Save & Broadcast to Devices</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

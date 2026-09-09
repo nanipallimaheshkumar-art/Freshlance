@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingBag, Sparkles, Clock, Navigation, User as UserIcon } from 'lucide-react';
+import { ShoppingBag, Sparkles, Clock, Navigation, User as UserIcon, Bike, Store, ShieldCheck, LogOut } from 'lucide-react';
 import { Header } from './components/Header';
 import { Storefront } from './components/Storefront';
 import { OrderHistory } from './components/OrderHistory';
@@ -25,15 +25,6 @@ export default function App() {
       const path = window.location.pathname.toLowerCase();
       const hash = window.location.hash.toLowerCase();
       const initialRoute = parseCurrentRoute(path, hash);
-      const initialUser = getCurrentSession();
-      const initialRole = normalizeRole(initialUser?.role);
-      const guard = evaluateRouteGuard(initialRole, initialRoute);
-
-      if (!guard.allowed) {
-        if (guard.redirectTo === '/delivery') return 'delivery';
-        return 'customer';
-      }
-
       if (initialRoute === 'delivery') return 'delivery';
       if (initialRoute === 'admin') return 'admin';
     }
@@ -41,10 +32,7 @@ export default function App() {
   });
 
   const [portalLoginError, setPortalLoginError] = useState<string | null>(null);
-  const [currentTab, setCurrentTab] = useState<'shop' | 'orders' | 'tracking' | 'login' | 'register'>(() => {
-    const session = getCurrentSession();
-    return session ? 'shop' : 'login';
-  });
+  const [currentTab, setCurrentTab] = useState<'shop' | 'orders' | 'tracking' | 'login' | 'register'>('shop');
   const [activeTrackingOrderId, setActiveTrackingOrderId] = useState<string>('FL-91428');
   const [cartItems, setCartItems] = useState<CartItem[]>(() => {
     try {
@@ -211,14 +199,6 @@ export default function App() {
       setActiveWeb('customer');
       setIsCheckoutOpen(true);
     } else {
-      if (!user) {
-        setActiveWeb('customer');
-        setCurrentTab('login');
-        try {
-          window.history.pushState({}, '', '/login');
-        } catch {}
-        return;
-      }
       setActiveWeb('customer');
       setCurrentTab('shop');
       try {
@@ -242,60 +222,18 @@ export default function App() {
       const path = window.location.pathname.toLowerCase();
       const hash = window.location.hash.toLowerCase();
       const targetRoute = parseCurrentRoute(path, hash);
-      const role = normalizeRole(user?.role);
 
       if (targetRoute === 'delivery') {
-        if (!user || role === 'delivery_partner' || role === 'admin') {
-          setActiveWeb('delivery');
-        } else {
-          showToast('Access Denied: You do not have permission to access this portal.');
-          setPortalLoginError('Access Denied: You do not have permission to access this portal.');
-          setActiveWeb('delivery');
-        }
+        setActiveWeb('delivery');
         return;
       }
 
       if (targetRoute === 'admin') {
-        if (!user || role === 'admin') {
-          setActiveWeb('admin');
-        } else {
-          showToast('Access Denied: You do not have permission to access this portal.');
-          setPortalLoginError('Access Denied: You do not have permission to access this portal.');
-          setActiveWeb('admin');
-        }
+        setActiveWeb('admin');
         return;
       }
 
-      // Customer route guard
-      const guard = evaluateRouteGuard(role, targetRoute);
-      if (!guard.allowed) {
-        if (guard.notificationMessage) {
-          showToast(guard.notificationMessage);
-        }
-        if (guard.redirectTo === '/delivery') {
-          setActiveWeb('delivery');
-          try {
-            window.history.replaceState({}, '', '/delivery');
-          } catch {}
-        } else if (guard.redirectTo === '/login') {
-          // Direct URL navigation to /checkout or /payment by unauthenticated guest
-          sessionStorage.setItem('freshlane_return_url', '/checkout');
-          setActiveWeb('customer');
-          setCurrentTab('login');
-          setIsCheckoutOpen(false);
-          try {
-            window.history.replaceState({}, '', '/login');
-          } catch {}
-        } else {
-          setActiveWeb('customer');
-          setCurrentTab('login');
-          try {
-            window.history.replaceState({}, '', '/login');
-          } catch {}
-        }
-        return;
-      }
-
+      // Customer routes
       setActiveWeb('customer');
       if (targetRoute === 'login') {
         setCurrentTab('login');
@@ -303,27 +241,15 @@ export default function App() {
         if (!user) {
           sessionStorage.setItem('freshlane_return_url', '/checkout');
           setCurrentTab('login');
-          showToast('Please log in to access checkout.');
-          try {
-            window.history.replaceState({}, '', '/login');
-          } catch {}
           return;
         }
         setIsCheckoutOpen(true);
       } else {
-        if (!user) {
-          setCurrentTab('login');
-          try {
-            window.history.replaceState({}, '', '/login');
-          } catch {}
-          return;
-        }
         setCurrentTab('shop');
         setIsCheckoutOpen(false);
       }
     };
 
-    handleNavigation();
     window.addEventListener('hashchange', handleNavigation);
     window.addEventListener('popstate', handleNavigation);
     return () => {
@@ -331,20 +257,6 @@ export default function App() {
       window.removeEventListener('popstate', handleNavigation);
     };
   }, [user]);
-
-  // Enforce delivery partner confinement: Delivery partners can ONLY access the /delivery portal
-  useEffect(() => {
-    const role = normalizeRole(user?.role);
-    if (role === 'delivery_partner') {
-      if (activeWeb !== 'delivery') {
-        setActiveWeb('delivery');
-        showToast('Delivery partners can ONLY access the /delivery portal.');
-        try {
-          window.history.replaceState({}, '', '/delivery');
-        } catch {}
-      }
-    }
-  }, [user, activeWeb]);
 
   // Auth event listener
   useEffect(() => {
@@ -474,6 +386,80 @@ export default function App() {
 
   const totalCartCount = cartItems.reduce((sum, item) => sum + item.qty, 0);
 
+  const renderPortalSwitcherBar = () => (
+    <div className="w-full bg-slate-950 text-slate-300 text-xs px-3 sm:px-4 py-1.5 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 z-50">
+      <div className="flex items-center gap-2 font-medium">
+        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+        <span className="text-white font-bold text-[11px] sm:text-xs">FreshLane Multi-Portal</span>
+        <span className="text-slate-400 text-[10px] hidden md:inline">· Active Live Sync</span>
+      </div>
+      <div className="flex items-center gap-1 bg-slate-900/90 p-0.5 rounded-xl border border-slate-800">
+        <button
+          type="button"
+          onClick={() => {
+            setActiveWeb('customer');
+            setCurrentTab('shop');
+            try { window.history.pushState({}, '', '/'); } catch {}
+          }}
+          className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+            activeWeb === 'customer'
+              ? 'bg-emerald-600 text-white shadow-xs'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <Store className="w-3.5 h-3.5" />
+          <span>Customer Store</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setActiveWeb('admin');
+            try { window.history.pushState({}, '', '/admin'); } catch {}
+          }}
+          className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+            activeWeb === 'admin'
+              ? 'bg-amber-600 text-white shadow-xs'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <ShieldCheck className="w-3.5 h-3.5" />
+          <span>Admin Ops</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setActiveWeb('delivery');
+            try { window.history.pushState({}, '', '/delivery'); } catch {}
+          }}
+          className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+            activeWeb === 'delivery'
+              ? 'bg-sky-600 text-white shadow-xs'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <Bike className="w-3.5 h-3.5" />
+          <span>Delivery Hub</span>
+        </button>
+      </div>
+      {user && (
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-slate-400 hidden lg:inline">
+            <strong className="text-slate-200">{user.name}</strong> ({user.role})
+          </span>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+            title="Sign out and reset session"
+          >
+            <LogOut className="w-3 h-3" />
+            <span className="hidden sm:inline">Sign Out</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
   // ---------------------------------------------------------------------------
   // 1. DELIVERY PORTAL ROUTING (/delivery)
   // ---------------------------------------------------------------------------
@@ -484,26 +470,30 @@ export default function App() {
     // Real Login Protection: require authentication & database role check
     if (!user || !isAuthorized) {
       return (
-        <>
+        <div className="min-h-screen bg-slate-950 flex flex-col font-sans">
+          {renderPortalSwitcherBar()}
           {toastMessage && (
             <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-xs font-semibold px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 border border-slate-700/50 animate-fade-in">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
               <span>{toastMessage}</span>
             </div>
           )}
-          <PortalLoginPage
-            portalType="delivery"
-            initialError={portalLoginError}
-            onLoginSuccess={handlePortalLoginSuccess}
-            onBackToShop={() => navigateToRoute('/')}
-          />
-        </>
+          <div className="flex-1 flex flex-col">
+            <PortalLoginPage
+              portalType="delivery"
+              initialError={portalLoginError}
+              onLoginSuccess={handlePortalLoginSuccess}
+              onBackToShop={() => navigateToRoute('/')}
+            />
+          </div>
+        </div>
       );
     }
 
     // Authenticated delivery partner or admin
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col font-sans">
+        {renderPortalSwitcherBar()}
         {toastMessage && (
           <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-xs font-semibold px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 border border-slate-700/50 animate-fade-in">
             <span className="w-2 h-2 rounded-full bg-sky-400 animate-ping" />
@@ -513,11 +503,11 @@ export default function App() {
         <DeliveryPortal
           user={user}
           onBackToShop={() => {
-            if (role === 'delivery_partner') {
-              showToast('Delivery partners can ONLY access the /delivery portal.');
-              return;
-            }
-            navigateToRoute('/');
+            setActiveWeb('customer');
+            setCurrentTab('shop');
+            try {
+              window.history.pushState({}, '', '/');
+            } catch {}
           }}
         />
       </div>
@@ -534,26 +524,30 @@ export default function App() {
     // Real Login Protection: require authentication & database role check
     if (!user || !isAuthorized) {
       return (
-        <>
+        <div className="min-h-screen bg-slate-950 flex flex-col font-sans">
+          {renderPortalSwitcherBar()}
           {toastMessage && (
             <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-xs font-semibold px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 border border-slate-700/50 animate-fade-in">
               <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
               <span>{toastMessage}</span>
             </div>
           )}
-          <PortalLoginPage
-            portalType="admin"
-            initialError={portalLoginError}
-            onLoginSuccess={handlePortalLoginSuccess}
-            onBackToShop={() => navigateToRoute('/')}
-          />
-        </>
+          <div className="flex-1 flex flex-col">
+            <PortalLoginPage
+              portalType="admin"
+              initialError={portalLoginError}
+              onLoginSuccess={handlePortalLoginSuccess}
+              onBackToShop={() => navigateToRoute('/')}
+            />
+          </div>
+        </div>
       );
     }
 
     // Authenticated Admin (Master Key)
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col font-sans">
+        {renderPortalSwitcherBar()}
         {toastMessage && (
           <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-xs font-semibold px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 border border-slate-700/50 animate-fade-in">
             <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
@@ -570,95 +564,11 @@ export default function App() {
   }
 
   // ---------------------------------------------------------------------------
-  // 3. AUTHENTICATION GATE (LOGIN ONLY FOR UNAUTHENTICATED VISITORS)
-  // When opening the site, unauthenticated visitors see ONLY the login screen.
-  // ---------------------------------------------------------------------------
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col font-sans selection:bg-emerald-500 selection:text-white w-full max-w-full overflow-x-hidden">
-        {/* Toast Notification */}
-        {toastMessage && (
-          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-xs font-semibold px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 border border-slate-700/50 animate-fade-in">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            <span>{toastMessage}</span>
-          </div>
-        )}
-
-        {/* Clean top bar for Authentication screen */}
-        <header className="w-full border-b border-slate-200 bg-white/90 backdrop-blur-md px-4 py-3.5 sticky top-0 z-30">
-          <div className="max-w-4xl mx-auto flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-base shadow-xs">
-                ✦
-              </div>
-              <div>
-                <div className="font-extrabold text-base tracking-tight text-slate-900 leading-none">
-                  freshlane<span className="text-emerald-600">.market</span>
-                </div>
-                <div className="text-[10px] text-slate-400 font-medium mt-0.5">
-                  Tadepalligudem 30-Min Fresh Produce Hub
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCurrentTab(currentTab === 'register' ? 'login' : 'register')}
-                className="text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3.5 py-1.5 rounded-xl transition-colors cursor-pointer border border-emerald-200/70"
-              >
-                {currentTab === 'register' ? '← Back to Sign In' : 'Create Account'}
-              </button>
-            </div>
-          </div>
-        </header>
-
-        {/* Authentication Content: Login or Create Account Only */}
-        <main className="flex-1 flex items-center justify-center p-4">
-          {currentTab === 'register' ? (
-            <CreateAccountPage
-              onRegisterSuccess={handleRegisterSuccess}
-              onGoToLogin={() => setCurrentTab('login')}
-              onGoToShop={() => {}}
-              isAuthGate={true}
-            />
-          ) : (
-            <LoginPage
-              onLoginSuccess={handleCustomerLoginSuccess}
-              onGoToRegister={() => setCurrentTab('register')}
-              onGoToShop={() => {}}
-              onOpenOperationsPortal={() => navigateToRoute('/admin')}
-              isAuthGate={true}
-            />
-          )}
-        </main>
-
-        {/* Minimal Bottom Bar with subtle staff portal links */}
-        <footer className="py-4 border-t border-slate-200 text-center text-xs text-slate-500 bg-white">
-          <div className="max-w-md mx-auto flex items-center justify-center gap-4 text-[11px] font-medium text-slate-400">
-            <button
-              onClick={() => navigateToRoute('/delivery')}
-              className="hover:text-emerald-600 transition-colors cursor-pointer"
-            >
-              Delivery Partner Portal
-            </button>
-            <span>·</span>
-            <button
-              onClick={() => navigateToRoute('/admin')}
-              className="hover:text-amber-600 transition-colors cursor-pointer"
-            >
-              Operations Admin Access
-            </button>
-          </div>
-        </footer>
-      </div>
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // 4. AUTHENTICATED CUSTOMER STOREFRONT (Full access to all produce & features)
+  // 3. CUSTOMER STOREFRONT (Full access to all produce & features)
   // ---------------------------------------------------------------------------
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col font-sans selection:bg-emerald-500 selection:text-white w-full max-w-full overflow-x-hidden">
+      {renderPortalSwitcherBar()}
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-20 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-xs font-semibold px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 border border-slate-700/50 animate-fade-in">

@@ -210,25 +210,24 @@ export function evaluateRouteGuard(
     };
   }
 
-  // 2. Delivery Partner: ONLY allowed on /delivery (and login screen)
+  // 2. Delivery Partner: Allowed on /delivery and customer storefront for browsing
   if (userRole === 'delivery_partner') {
-    if (route === 'delivery' || route === 'login') {
+    if (route === 'admin') {
       return {
-        allowed: true,
-        targetRoute: route,
+        allowed: false,
+        redirectTo: '/delivery',
+        targetRoute: 'delivery',
+        deniedReason: 'Delivery partners cannot access the Admin Operations portal.',
+        notificationMessage: 'Admin portal requires owner/administrator credentials.',
       };
     }
-    // Attempted to visit storefront (/), /shop, /checkout, or /admin -> Redirect to /delivery
     return {
-      allowed: false,
-      redirectTo: '/delivery',
-      targetRoute: 'delivery',
-      deniedReason: 'Delivery partners can ONLY access the /delivery portal.',
-      notificationMessage: 'Delivery partners are restricted exclusively to the delivery portal.',
+      allowed: true,
+      targetRoute: route,
     };
   }
 
-  // 3. Unauthenticated Guest: Site opening is login only (cannot access store until authenticated)
+  // 3. Unauthenticated Guest: Can browse storefront and shop; checkout requires sign in
   if (userRole === null) {
     if (route === 'admin' || route === 'delivery') {
       return {
@@ -237,18 +236,17 @@ export function evaluateRouteGuard(
         requiresPortalLogin: true,
       };
     }
-    // Strict Site Auth Gate: Unauthenticated users cannot view storefront, shop, or checkout
-    if (route !== 'login') {
+    if (route === 'checkout') {
       return {
         allowed: false,
         redirectTo: '/login',
         targetRoute: 'login',
-        deniedReason: 'Authentication required. Please sign in to enter the FreshLane produce store.',
+        deniedReason: 'Please sign in or create an account to proceed to checkout.',
       };
     }
     return {
       allowed: true,
-      targetRoute: 'login',
+      targetRoute: route,
     };
   }
 

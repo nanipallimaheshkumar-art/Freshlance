@@ -82,6 +82,31 @@ const serverProduceDatabase: Map<string, any> = new Map(
 let serverCatalogVersion = 1;
 let serverCatalogLastUpdated = new Date().toISOString();
 
+// Active SSE Connections for Real-Time Product Catalog & Price Broadcasts
+const productSseClients: Set<express.Response> = new Set();
+
+export function broadcastCatalogChange(
+  type: "PRODUCT_UPDATED" | "PRODUCT_CREATED" | "PRODUCT_DELETED",
+  data: { productId?: string; product?: any; version: number }
+) {
+  const payload = `data: ${JSON.stringify({
+    type,
+    version: data.version,
+    productId: data.productId,
+    product: data.product,
+    catalog: Array.from(serverProduceDatabase.values()),
+    timestamp: Date.now(),
+  })}\n\n`;
+
+  for (const client of productSseClients) {
+    try {
+      client.write(payload);
+    } catch {
+      productSseClients.delete(client);
+    }
+  }
+}
+
 // Body parser for JSON with support for base64 images up to 20MB
 app.use(express.json({ limit: "20mb" }));
 
@@ -862,6 +887,42 @@ app.get("/api/products/version", (_req, res) => {
   });
 });
 
+// 4a-1c. Real-Time Server-Sent Events (SSE) stream for instant product & price broadcasts to customer devices
+app.get(["/api/products/stream", "/api/products/events"], (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+
+  res.flushHeaders?.();
+
+  // Send initial catalog snapshot to newly connected client
+  const initialPayload = `data: ${JSON.stringify({
+    type: "INITIAL_SYNC",
+    version: serverCatalogVersion,
+    catalog: Array.from(serverProduceDatabase.values()),
+    timestamp: Date.now(),
+  })}\n\n`;
+  res.write(initialPayload);
+
+  productSseClients.add(res);
+
+  // Send heartbeat keep-alive every 20 seconds to keep connection alive through proxies
+  const heartbeatTimer = setInterval(() => {
+    try {
+      res.write(": keepalive\n\n");
+    } catch {
+      clearInterval(heartbeatTimer);
+      productSseClients.delete(res);
+    }
+  }, 20000);
+
+  req.on("close", () => {
+    clearInterval(heartbeatTimer);
+    productSseClients.delete(res);
+  });
+});
+
 // 4a-2. Admin Update Product Details & Real-Time Price (PUT /api/admin/products/:id)
 app.put(["/api/admin/products/:id", "/api/products/:id"], (req, res) => {
   const session = extractServerSession(req);
@@ -921,11 +982,19 @@ app.put(["/api/admin/products/:id", "/api/products/:id"], (req, res) => {
   serverCatalogVersion++;
   serverCatalogLastUpdated = new Date().toISOString();
 
+  // Instant real-time broadcast to all connected customer clients
+  broadcastCatalogChange("PRODUCT_UPDATED", {
+    productId,
+    product: updated,
+    version: serverCatalogVersion,
+  });
+
   return res.json({
     success: true,
     version: serverCatalogVersion,
     lastUpdated: serverCatalogLastUpdated,
     product: updated,
+    broadcasted: true,
   });
 });
 
@@ -960,11 +1029,19 @@ app.post(["/api/admin/products", "/api/products"], (req, res) => {
   serverCatalogVersion++;
   serverCatalogLastUpdated = new Date().toISOString();
 
+  // Instant real-time broadcast to all connected customer clients
+  broadcastCatalogChange("PRODUCT_CREATED", {
+    productId: item.id,
+    product: normalizedItem,
+    version: serverCatalogVersion,
+  });
+
   return res.json({
     success: true,
     version: serverCatalogVersion,
     lastUpdated: serverCatalogLastUpdated,
     product: normalizedItem,
+    broadcasted: true,
   });
 });
 
@@ -986,12 +1063,19 @@ app.delete(["/api/admin/products/:id", "/api/products/:id"], (req, res) => {
   serverCatalogVersion++;
   serverCatalogLastUpdated = new Date().toISOString();
 
+  // Instant real-time broadcast to all connected customer clients
+  broadcastCatalogChange("PRODUCT_DELETED", {
+    productId,
+    version: serverCatalogVersion,
+  });
+
   return res.json({
     success: true,
     version: serverCatalogVersion,
     lastUpdated: serverCatalogLastUpdated,
     deletedId: productId,
     existed: deleted,
+    broadcasted: true,
   });
 });
 
