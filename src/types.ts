@@ -172,6 +172,7 @@ export interface OrderLiveTrackingState {
   customerCoords: LocationCoords;
   storeCoords: LocationCoords;
   geofenceArrived: boolean;
+  deliveryOtp?: string;
   timeline: {
     step: 'placed' | 'confirmed' | 'picked_up' | 'on_the_way' | 'delivered';
     label: string;

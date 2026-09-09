@@ -67,12 +67,17 @@ export default function App() {
         if (!prevCart || prevCart.length === 0) return prevCart;
         let hasChanges = false;
         const updated = prevCart.map((cartItem) => {
-          const matching = latestCatalog.find((p) => p.id === cartItem.produce.id);
-          if (matching && (matching.price !== cartItem.produce.price || matching.isAvailableToday !== cartItem.produce.isAvailableToday)) {
+          const itemId = cartItem.id || (cartItem as any).produce?.id;
+          if (!itemId) return cartItem;
+          const matching = latestCatalog.find((p) => p.id === itemId);
+          if (matching && (matching.price !== cartItem.price || matching.name !== cartItem.name)) {
             hasChanges = true;
             return {
               ...cartItem,
-              produce: matching,
+              id: matching.id,
+              name: matching.name,
+              price: matching.price,
+              unit: matching.unit || cartItem.unit,
             };
           }
           return cartItem;

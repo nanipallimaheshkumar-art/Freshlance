@@ -3,16 +3,19 @@ import { X, Plus, Minus, Star, Heart, MapPin, Scale, Clock, ShieldCheck, Shoppin
 import { ProduceItem } from '../types';
 
 interface ProductDetailModalProps {
-  item: ProduceItem | null;
+  item?: ProduceItem | null;
+  product?: ProduceItem | null;
   onClose: () => void;
-  onAddToCart: (item: ProduceItem, qty: number) => void;
+  onAddToCart: (item: any, qty?: number) => void;
 }
 
 export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
-  item,
+  item: propItem,
+  product: propProduct,
   onClose,
   onAddToCart,
 }) => {
+  const item = propItem || propProduct || null;
   const [qty, setQty] = useState(1);
 
   if (!item) return null;

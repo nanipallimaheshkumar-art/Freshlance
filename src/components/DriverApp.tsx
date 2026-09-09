@@ -639,7 +639,7 @@ export const DriverApp: React.FC<DriverAppProps> = ({
                 driverVehicle={currentDriver.vehicleNumber || 'EV Scooter'}
                 etaMinutes={geofenceTriggered ? 1 : Math.max(2, Math.round(currentDistanceMeters / 300))}
                 distanceMeters={currentDistanceMeters}
-                isDelivered={orderStatus === 'delivered'}
+                isDelivered={false}
                 geofenceArrived={geofenceTriggered}
                 heightClass="h-72 sm:h-80 lg:h-[400px]"
               />
@@ -840,11 +840,7 @@ export const DriverApp: React.FC<DriverAppProps> = ({
                     <div className="font-bold text-slate-900">Customer Doorstep</div>
                     <div className="text-[11px] text-slate-500">{customerAddress}</div>
                   </div>
-                  {orderStatus === 'delivered' ? (
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                      Delivered ✓
-                    </span>
-                  ) : geofenceTriggered ? (
+                  {geofenceTriggered ? (
                     <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-300 animate-pulse">
                       In Geofence (&lt;50m)
                     </span>

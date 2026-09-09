@@ -18,6 +18,7 @@ export interface DeliveryEligibilityResult {
   hubPincode: string;
   maxRadiusKm: number;
   localityMatched?: string;
+  customerCoords?: LatLng;
   reason?: string;
   message: string;
 }
