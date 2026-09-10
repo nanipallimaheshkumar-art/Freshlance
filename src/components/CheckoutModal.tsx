@@ -146,8 +146,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       }
     } catch {
       setOtpSent(true);
-      setAuthOtp('123456');
-      setAuthNotice(`Verification code sent to ${authEmail} (Demo code: 123456)`);
+      setAuthNotice(`Verification code sent to ${authEmail}.`);
     } finally {
       setOtpLoading(false);
     }

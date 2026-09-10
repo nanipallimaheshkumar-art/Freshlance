@@ -52,12 +52,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     }, 400);
   };
 
-  const handleFillDemo = () => {
-    setEmail('riya@example.com');
-    setPassword('password123');
-    setError(null);
-  };
-
   return (
     <div className="min-h-[calc(100vh-100px)] py-10 px-4 flex items-center justify-center">
       <div className="w-full max-w-md">
@@ -140,7 +134,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               </label>
               <button
                 type="button"
-                onClick={() => alert('Password reset link sent to demo registered email!')}
+                onClick={() => alert('Password reset instructions sent to your registered email.')}
                 className="text-emerald-600 hover:text-emerald-700 hover:underline font-semibold text-[11px] cursor-pointer"
               >
                 Forgot password?
@@ -163,38 +157,27 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             </button>
           </form>
 
-          {/* Quick Demo Fill Buttons */}
+          {/* Guest Checkout Option */}
           <div className="mt-5 pt-4 border-t border-slate-100 text-center">
-            <p className="text-[11px] font-medium text-slate-500 mb-2">Quick sign in options:</p>
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              <button
-                type="button"
-                onClick={handleFillDemo}
-                className="px-3 py-1.5 text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200/80 rounded-xl hover:bg-emerald-100 transition-colors cursor-pointer flex items-center gap-1.5"
-              >
-                <User className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Fill Demo (Riya Sharma)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const guestUser: UserAccount = {
-                    id: 'guest_user',
-                    name: 'Guest Shopper',
-                    email: 'guest@freshlane.market',
-                    phone: '+91 98765 43210',
-                    role: 'customer',
-                    address: 'Main Bazaar, Tadepalligudem, AP',
-                    registeredAt: new Date().toISOString(),
-                  };
-                  onLoginSuccess(guestUser);
-                }}
-                className="px-3 py-1.5 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 border border-slate-200"
-              >
-                <Store className="w-3.5 h-3.5 text-slate-600" />
-                <span>Continue as Guest</span>
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const guestUser: UserAccount = {
+                  id: 'guest_user',
+                  name: 'Guest Shopper',
+                  email: 'guest@freshlane.market',
+                  phone: '+91 98765 43210',
+                  role: 'customer',
+                  address: 'Main Bazaar, Tadepalligudem, AP',
+                  registeredAt: new Date().toISOString(),
+                };
+                onLoginSuccess(guestUser);
+              }}
+              className="px-3.5 py-1.5 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-colors cursor-pointer inline-flex items-center gap-1.5 border border-slate-200"
+            >
+              <Store className="w-3.5 h-3.5 text-slate-600" />
+              <span>Continue as Guest</span>
+            </button>
           </div>
 
           {/* Create an account option */}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Shield, Bike, Lock, Mail, KeyRound, ArrowRight, ArrowLeft, CheckCircle2, AlertCircle, Sparkles } from 'lucide-react';
+import { Shield, Bike, Lock, Mail, KeyRound, ArrowRight, ArrowLeft, CheckCircle2, AlertCircle } from 'lucide-react';
 import { UserAccount } from '../types';
 import { setCurrentSession } from '../utils/authStore';
 import { normalizeRole } from '../utils/rbac';
@@ -9,6 +9,7 @@ interface PortalLoginPageProps {
   portalType: 'admin' | 'delivery';
   onLoginSuccess: (user: UserAccount) => void;
   onBackToShop: () => void;
+  onSwitchPortal?: (target: 'admin' | 'delivery') => void;
   initialError?: string | null;
 }
 
@@ -16,6 +17,7 @@ export const PortalLoginPage: React.FC<PortalLoginPageProps> = ({
   portalType,
   onLoginSuccess,
   onBackToShop,
+  onSwitchPortal,
   initialError = null,
 }) => {
   const isAdmin = portalType === 'admin';
@@ -58,9 +60,7 @@ export const PortalLoginPage: React.FC<PortalLoginPageProps> = ({
     } catch {
       // Offline fallback
       setOtpSent(true);
-      const demoCode = '123456';
-      setOtp(demoCode);
-      setOtpNotice(`Verification code sent to ${email} (Demo code: ${demoCode})`);
+      setOtpNotice(`Verification code sent to ${email}.`);
     } finally {
       setLoading(false);
     }
@@ -347,8 +347,24 @@ export const PortalLoginPage: React.FC<PortalLoginPageProps> = ({
           </form>
         </div>
 
+        {/* Cross-portal quick switch */}
+        {onSwitchPortal && (
+          <div className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={() => onSwitchPortal(isAdmin ? 'delivery' : 'admin')}
+              className="text-xs font-medium text-slate-400 hover:text-slate-200 transition-colors cursor-pointer inline-flex items-center gap-1.5 py-1 px-3 rounded-xl bg-slate-900/60 border border-slate-800"
+            >
+              <span>Need {isAdmin ? 'Delivery Web (/delivery)' : 'Admin Web (/admin)'}?</span>
+              <span className={isAdmin ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
+                Switch Portal &rarr;
+              </span>
+            </button>
+          </div>
+        )}
+
         {/* Footer Note */}
-        <div className="text-center mt-6 text-xs text-slate-500">
+        <div className="text-center mt-4 text-xs text-slate-500">
           <p>FreshLane Produce Market · Tadepalligudem 534102 Hub</p>
         </div>
       </div>

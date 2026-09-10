@@ -118,9 +118,21 @@ export type AppRoute = 'storefront' | 'shop' | 'checkout' | 'admin' | 'delivery'
 /**
  * Normalizes a raw pathname or hash to an AppRoute
  */
-export function parseCurrentRoute(pathname: string, hash: string): AppRoute {
+export function parseCurrentRoute(pathname: string, hash: string, search?: string): AppRoute {
   const p = (pathname || '').toLowerCase();
   const h = (hash || '').toLowerCase();
+  const s = (search || '').toLowerCase();
+
+  // Query parameter overrides
+  if (s.includes('web=delivery') || s.includes('app=delivery') || s.includes('portal=delivery')) {
+    return 'delivery';
+  }
+  if (s.includes('web=admin') || s.includes('app=admin') || s.includes('portal=admin')) {
+    return 'admin';
+  }
+  if (s.includes('web=customer') || s.includes('app=customer') || s.includes('portal=shop') || s.includes('portal=customer')) {
+    return 'storefront';
+  }
 
   // Delivery Portal routes
   if (
