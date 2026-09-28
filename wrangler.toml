@@ -1,0 +1,20 @@
+name = "freshlane-produce"
+main = "worker.ts"
+compatibility_date = "2024-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Cloudflare static asset serving for Vite single-page application (SPA)
+[assets]
+directory = "./dist"
+not_found_handling = "single-page-application"
+
+[vars]
+TADEPALLIGUDEM_HUB_LAT = "16.8131"
+TADEPALLIGUDEM_HUB_LNG = "81.5273"
+DELIVERY_MAX_RADIUS_KM = "15"
+
+# Note: Secrets should be added via:
+#   npx wrangler secret put RAZORPAY_KEY_ID
+#   npx wrangler secret put RAZORPAY_KEY_SECRET
+#   npx wrangler secret put GEMINI_API_KEY
+# Or configured under Settings -> Variables in the Cloudflare Dashboard.

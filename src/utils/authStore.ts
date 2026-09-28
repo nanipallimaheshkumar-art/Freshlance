@@ -1,0 +1,666 @@
+import { UserAccount } from '../types';
+import { generateSessionToken, normalizeRole, AppRole } from './rbac';
+
+const SESSION_KEY = 'freshlane_session';
+const SESSION_TOKEN_KEY = 'freshlane_session_token';
+const REGISTERED_USERS_KEY = 'freshlane_registered_users';
+
+// Authorized Admin Account
+export const ADMIN_CREDENTIALS = {
+  email: 'nanipallimaheshkumar@gmail.com',
+  securityCode: '132908',
+};
+
+const DEFAULT_USERS: (UserAccount & { password?: string })[] = [
+  {
+    id: 'admin-mahesh',
+    name: 'Mahesh Kumar',
+    email: 'nanipallimaheshkumar@gmail.com',
+    phone: '+91 99001 12233',
+    role: 'admin',
+    address: 'FreshLane Operations Hub #1, Subba Rao Peta',
+    city: 'Tadepalligudem',
+    state: 'Andhra Pradesh',
+    country: 'India',
+    pincode: '534102',
+    neighbourhood: 'Subba Rao Peta',
+    registeredAt: '2026-07-01T08:00:00.000Z',
+    isVerified: true,
+    password: '132908',
+  },
+  {
+    id: 'DRV-101',
+    name: 'Arjun S.',
+    email: 'arjun@freshlane.com',
+    phone: '+91 98450 12345',
+    role: 'delivery_partner',
+    vehicleNumber: 'AP-39-EQ-4421',
+    vehicleType: 'electric_scooter',
+    zone: 'KN Road Hub',
+    address: 'KN Road, Tadepalligudem Hub',
+    city: 'Tadepalligudem',
+    state: 'Andhra Pradesh',
+    country: 'India',
+    pincode: '534102',
+    registeredAt: '2026-08-01T08:00:00.000Z',
+    isVerified: true,
+    password: 'driver123',
+  },
+  {
+    id: 'user-demo-1',
+    name: 'Riya Sharma',
+    email: 'riya@example.com',
+    phone: '+91 98765 43210',
+    role: 'customer',
+    address: '42 Sri Rama Colony, KN Road',
+    city: 'Tadepalligudem',
+    state: 'Andhra Pradesh',
+    country: 'India',
+    pincode: '534102',
+    neighbourhood: 'KN Road',
+    registeredAt: '2026-08-15T10:30:00.000Z',
+    isVerified: true,
+    password: 'password123',
+  },
+];
+
+// OTP / Verification Code storage
+const OTP_STORE_KEY = 'freshlane_otp_sessions';
+
+interface OtpRecord {
+  identifier: string;
+  code: string;
+  expiresAt: number;
+}
+
+export function generateVerificationCode(identifier: string): string {
+  const norm = identifier.trim().toLowerCase();
+  // Generate a realistic 6-digit numeric verification code
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+  try {
+    const raw = sessionStorage.getItem(OTP_STORE_KEY);
+    const records: OtpRecord[] = raw ? JSON.parse(raw) : [];
+    const filtered = records.filter((r) => r.identifier !== norm);
+    filtered.push({ identifier: norm, code, expiresAt });
+    sessionStorage.setItem(OTP_STORE_KEY, JSON.stringify(filtered));
+  } catch (e) {
+    console.error('Failed to store OTP', e);
+  }
+
+  return code;
+}
+
+export function verifyCode(identifier: string, inputCode: string): { valid: boolean; error?: string } {
+  const norm = identifier.trim().toLowerCase();
+  const cleanCode = inputCode.trim();
+
+  try {
+    const raw = sessionStorage.getItem(OTP_STORE_KEY);
+    const records: OtpRecord[] = raw ? JSON.parse(raw) : [];
+    
+    // Check for matching identifier or any active unexpired record with matching code
+    let found = records.find((r) => r.identifier === norm);
+    if (!found) {
+      found = records.find((r) => r.code === cleanCode && Date.now() <= r.expiresAt);
+    }
+
+    if (!found) {
+      return { valid: false, error: 'Verification code not found. Please click Resend Code.' };
+    }
+
+    if (Date.now() > found.expiresAt) {
+      return { valid: false, error: 'Verification code has expired. Please request a new code.' };
+    }
+
+    if (found.code !== cleanCode) {
+      return { valid: false, error: 'Invalid verification code. Please check your email and try again.' };
+    }
+
+    return { valid: true };
+  } catch {
+    return { valid: false, error: 'Verification failed. Please try again.' };
+  }
+}
+
+export function getRegisteredUsers(): (UserAccount & { password?: string })[] {
+  try {
+    const raw = localStorage.getItem(REGISTERED_USERS_KEY);
+    let list: (UserAccount & { password?: string })[] = [];
+
+    if (!raw) {
+      list = [...DEFAULT_USERS];
+    } else {
+      const parsed = JSON.parse(raw);
+      list = Array.isArray(parsed) ? parsed : [...DEFAULT_USERS];
+    }
+
+    // Sanitize: remove any legacy demo owner or demo driver credentials
+    let changed = false;
+    const cleaned = list.filter((u) => {
+      const e = (u.email || '').toLowerCase().trim();
+      if (e === 'owner@freshlane.com' || e === 'driver@freshlane.com') {
+        changed = true;
+        return false;
+      }
+      return true;
+    });
+
+    // Ensure the real Admin account exists with exact credentials
+    const adminIdx = cleaned.findIndex(
+      (u) => u.email?.toLowerCase().trim() === ADMIN_CREDENTIALS.email.toLowerCase()
+    );
+
+    if (adminIdx >= 0) {
+      if (cleaned[adminIdx].password !== ADMIN_CREDENTIALS.securityCode || cleaned[adminIdx].role !== 'admin') {
+        cleaned[adminIdx].password = ADMIN_CREDENTIALS.securityCode;
+        cleaned[adminIdx].role = 'admin';
+        changed = true;
+      }
+    } else {
+      cleaned.unshift(DEFAULT_USERS[0]);
+      changed = true;
+    }
+
+    // Ensure driver account exists
+    const driverIdx = cleaned.findIndex((u) => u.email?.toLowerCase().trim() === 'arjun@freshlane.com');
+    if (driverIdx < 0) {
+      cleaned.push(DEFAULT_USERS[1]);
+      changed = true;
+    }
+
+    if (changed || !raw) {
+      localStorage.setItem(REGISTERED_USERS_KEY, JSON.stringify(cleaned));
+    }
+
+    return cleaned;
+  } catch {
+    return DEFAULT_USERS;
+  }
+}
+
+export function saveRegisteredUsers(users: (UserAccount & { password?: string })[]) {
+  try {
+    localStorage.setItem(REGISTERED_USERS_KEY, JSON.stringify(users));
+  } catch (e) {
+    console.error('Failed to save users', e);
+  }
+}
+
+export function getCurrentSession(): UserAccount | null {
+  try {
+    const active = sessionStorage.getItem(SESSION_KEY) || localStorage.getItem(SESSION_KEY);
+    if (!active) return null;
+    const user: UserAccount = JSON.parse(active);
+    user.role = normalizeRole(user.role);
+    if (!user.token) {
+      user.token = generateSessionToken(user);
+    }
+    return user;
+  } catch {
+    return null;
+  }
+}
+
+export function getSessionToken(): string {
+  try {
+    const session = getCurrentSession();
+    if (session?.token) return session.token;
+    return localStorage.getItem(SESSION_TOKEN_KEY) || sessionStorage.getItem(SESSION_TOKEN_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+export function setCurrentSession(user: UserAccount, remember = true) {
+  try {
+    user.role = normalizeRole(user.role);
+    if (!user.token) {
+      user.token = generateSessionToken(user);
+    }
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(user));
+    sessionStorage.setItem(SESSION_TOKEN_KEY, user.token);
+    if (remember) {
+      localStorage.setItem(SESSION_KEY, JSON.stringify(user));
+      localStorage.setItem(SESSION_TOKEN_KEY, user.token);
+    } else {
+      localStorage.removeItem(SESSION_KEY);
+      localStorage.removeItem(SESSION_TOKEN_KEY);
+    }
+    window.dispatchEvent(new CustomEvent('freshlane-auth-change', { detail: user }));
+  } catch (e) {
+    console.error('Failed to set session', e);
+  }
+}
+
+export function clearCurrentSession() {
+  try {
+    sessionStorage.removeItem(SESSION_KEY);
+    sessionStorage.removeItem(SESSION_TOKEN_KEY);
+    localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(SESSION_TOKEN_KEY);
+    window.dispatchEvent(new CustomEvent('freshlane-auth-change', { detail: null }));
+  } catch (e) {
+    console.error('Failed to clear session', e);
+  }
+}
+
+/**
+ * Quick switch active user role for RBAC testing & demonstrations
+ */
+export function switchSessionRole(targetRole: AppRole): UserAccount {
+  const users = getRegisteredUsers();
+  let selectedUser: (UserAccount & { password?: string }) | undefined;
+
+  if (targetRole === 'admin') {
+    selectedUser = users.find((u) => normalizeRole(u.role) === 'admin') || DEFAULT_USERS[0];
+  } else if (targetRole === 'delivery_partner') {
+    selectedUser = users.find((u) => normalizeRole(u.role) === 'delivery_partner') || DEFAULT_USERS[1];
+  } else {
+    selectedUser = users.find((u) => normalizeRole(u.role) === 'customer') || DEFAULT_USERS[2];
+  }
+
+  const { password: _, ...safeUser } = selectedUser;
+  safeUser.role = targetRole;
+  safeUser.token = generateSessionToken(safeUser);
+  setCurrentSession(safeUser, true);
+  return safeUser;
+}
+
+export function registerAccount(params: {
+  name: string;
+  email: string;
+  phone?: string;
+  password: string;
+  role?: 'shopper' | 'owner' | 'driver';
+  address?: string;
+  neighbourhood?: string;
+  pincode?: string;
+  verificationCode?: string;
+}): { success: boolean; error?: string; user?: UserAccount } {
+  const users = getRegisteredUsers();
+  const emailNorm = params.email.trim().toLowerCase();
+
+  // Validate verification code if provided
+  if (params.verificationCode) {
+    const vCheck = verifyCode(emailNorm, params.verificationCode);
+    if (!vCheck.valid) {
+      return {
+        success: false,
+        error: vCheck.error || 'Invalid verification code. Please check the code sent to your mobile & email.',
+      };
+    }
+  }
+
+  // Check existing
+  if (users.some((u) => u.email.toLowerCase() === emailNorm)) {
+    return {
+      success: false,
+      error: 'An account with this email address already exists. Please sign in instead.',
+    };
+  }
+
+  // Format Indian phone number (+91)
+  let formattedPhone = params.phone?.trim() || '';
+  if (formattedPhone) {
+    const digitsOnly = formattedPhone.replace(/\D/g, '');
+    if (digitsOnly.length === 10) {
+      formattedPhone = `+91 ${digitsOnly.slice(0, 5)} ${digitsOnly.slice(5)}`;
+    } else if (digitsOnly.length === 12 && digitsOnly.startsWith('91')) {
+      formattedPhone = `+91 ${digitsOnly.slice(2, 7)} ${digitsOnly.slice(7)}`;
+    }
+  }
+
+  const newUser: UserAccount & { password?: string } = {
+    id: `user-${Date.now()}`,
+    name: params.name.trim(),
+    email: emailNorm,
+    phone: formattedPhone || '+91 98765 43210',
+    role: params.role || 'shopper',
+    address: params.address?.trim() || `${params.neighbourhood || 'KN Road'}, Tadepalligudem, 534102`,
+    city: 'Tadepalligudem',
+    state: 'Andhra Pradesh',
+    country: 'India',
+    pincode: params.pincode || '534102',
+    neighbourhood: params.neighbourhood || 'KN Road',
+    registeredAt: new Date().toISOString(),
+    isVerified: true,
+    password: params.password,
+  };
+
+  users.push(newUser);
+  saveRegisteredUsers(users);
+
+  // Automatically sign in the user
+  const { password: _, ...safeUser } = newUser;
+  setCurrentSession(safeUser, true);
+
+  return { success: true, user: safeUser };
+}
+
+export function authenticateUser(
+  email: string,
+  passcode: string,
+  role?: string
+): { success: boolean; error?: string; user?: UserAccount } {
+  const users = getRegisteredUsers();
+  const emailNorm = email.trim().toLowerCase();
+
+  const matched = users.find((u) => u.email.toLowerCase() === emailNorm);
+
+  if (!matched) {
+    return {
+      success: false,
+      error: 'No account found with this email. Please check your credentials or create an account.',
+    };
+  }
+
+  if (matched.password && matched.password !== passcode) {
+    return {
+      success: false,
+      error: 'Incorrect password. Please verify and try again.',
+    };
+  }
+
+  const normUserRole = normalizeRole(matched.role);
+
+  // If role was explicitly passed and does not match
+  if (role && normalizeRole(role) !== normUserRole) {
+    // Admin has universal access and is never blocked
+    if (normUserRole !== 'admin') {
+      return {
+        success: false,
+        error: `This account is registered as a ${normUserRole}. Please use the matching portal.`,
+      };
+    }
+  }
+
+  const { password: _, ...safeUser } = matched;
+  safeUser.role = normUserRole;
+  safeUser.token = generateSessionToken(safeUser);
+  return { success: true, user: safeUser };
+}
+
+// Dedicated secure authentication for Staff (Admin & Fleet Drivers)
+export function authenticateStaff(
+  identifier: string,
+  passcode: string,
+  preferredRole: 'admin' | 'delivery_partner' | 'owner' | 'driver' = 'admin'
+): { success: boolean; error?: string; user?: UserAccount } {
+  const users = getRegisteredUsers();
+  const cleanId = identifier.trim().toLowerCase();
+  const cleanPass = passcode.trim();
+
+  // 1. STORE ADMIN LOGIN
+  if (preferredRole === 'admin' || preferredRole === 'owner') {
+    if (cleanId !== ADMIN_CREDENTIALS.email.toLowerCase()) {
+      return {
+        success: false,
+        error: 'Unauthorized administrator email address. Access denied.',
+      };
+    }
+
+    if (cleanPass !== ADMIN_CREDENTIALS.securityCode) {
+      return {
+        success: false,
+        error: 'Invalid security code. Access denied.',
+      };
+    }
+
+    const admin = users.find(
+      (u) => normalizeRole(u.role) === 'admin' && u.email.toLowerCase() === ADMIN_CREDENTIALS.email.toLowerCase()
+    );
+
+    if (admin) {
+      const { password: _, ...safeUser } = admin;
+      safeUser.role = 'admin';
+      safeUser.token = generateSessionToken(safeUser);
+      return { success: true, user: safeUser };
+    }
+
+    const newAdmin: UserAccount = {
+      id: 'admin-mahesh',
+      name: 'Store Administrator',
+      email: ADMIN_CREDENTIALS.email,
+      role: 'admin',
+      city: 'Tadepalligudem',
+      country: 'India',
+      pincode: '534102',
+      registeredAt: new Date().toISOString(),
+      isVerified: true,
+    };
+    newAdmin.token = generateSessionToken(newAdmin);
+    return {
+      success: true,
+      user: newAdmin,
+    };
+  }
+
+  // 2. DELIVERY PARTNER LOGIN
+  if (preferredRole === 'delivery_partner' || preferredRole === 'driver') {
+    const drivers = users.filter((u) => normalizeRole(u.role) === 'delivery_partner');
+
+    if (drivers.length === 0) {
+      return {
+        success: false,
+        error: 'No driver accounts registered yet. Please contact the Store Administrator to create driver credentials.',
+      };
+    }
+
+    // Match driver by email, phone, or driver ID
+    const matchedDriver = drivers.find((d) => {
+      const matchEmail = d.email.toLowerCase() === cleanId;
+      const matchPhone = d.phone && d.phone.replace(/\D/g, '').includes(cleanId.replace(/\D/g, ''));
+      const matchId = d.id.toLowerCase() === cleanId;
+      return matchEmail || matchPhone || matchId;
+    });
+
+    if (!matchedDriver) {
+      return {
+        success: false,
+        error: 'Driver credentials not found. Only registered fleet drivers can access this portal.',
+      };
+    }
+
+    if (matchedDriver.password && matchedDriver.password !== cleanPass) {
+      return {
+        success: false,
+        error: 'Incorrect driver password. Please check your credentials or contact the Store Administrator.',
+      };
+    }
+
+    const { password: _, ...safeDriver } = matchedDriver;
+    safeDriver.role = 'delivery_partner';
+    safeDriver.token = generateSessionToken(safeDriver);
+    return { success: true, user: safeDriver };
+  }
+
+  return { success: false, error: 'Invalid staff role specified.' };
+}
+
+export function isStaffUser(user: UserAccount | null): boolean {
+  if (!user) return false;
+  const r = normalizeRole(user.role);
+  return r === 'admin' || r === 'delivery_partner';
+}
+
+// ---------------------------------------------------------------------------
+// ADMIN DRIVER MANAGEMENT API (Store Admin can add/view/delete driver credentials)
+// ---------------------------------------------------------------------------
+
+export interface RegisterDriverInput {
+  name: string;
+  email: string;
+  password: string;
+  phone: string;
+  vehicleNumber: string;
+  vehicleType?: 'electric_scooter' | 'bike' | 'van';
+  zone?: string;
+}
+
+export function registerDriverAccount(input: RegisterDriverInput): {
+  success: boolean;
+  error?: string;
+  driver?: UserAccount & { password?: string };
+} {
+  const users = getRegisteredUsers();
+  const cleanEmail = input.email.trim().toLowerCase();
+
+  if (!input.name.trim()) {
+    return { success: false, error: 'Please enter driver full name.' };
+  }
+  if (!cleanEmail || !cleanEmail.includes('@')) {
+    return { success: false, error: 'Please provide a valid driver email address.' };
+  }
+  if (!input.password || input.password.trim().length < 4) {
+    return { success: false, error: 'Driver password must be at least 4 characters.' };
+  }
+  if (!input.phone.trim()) {
+    return { success: false, error: 'Please enter driver phone number.' };
+  }
+
+  // Check if email already taken
+  const existing = users.find((u) => u.email.toLowerCase() === cleanEmail);
+  if (existing) {
+    return {
+      success: false,
+      error: `An account with email "${cleanEmail}" is already registered.`,
+    };
+  }
+
+  const driverId = `DRV-${Math.floor(100 + Math.random() * 900)}`;
+
+  const newDriver: UserAccount & { password?: string } = {
+    id: driverId,
+    name: input.name.trim(),
+    email: cleanEmail,
+    password: input.password.trim(),
+    phone: input.phone.trim(),
+    role: 'driver',
+    vehicleNumber: input.vehicleNumber.trim() || 'AP-39-EQ-4421',
+    vehicleType: input.vehicleType || 'electric_scooter',
+    zone: input.zone?.trim() || 'KN Road, Tadepalligudem',
+    address: `${input.zone || 'KN Road'}, Tadepalligudem Hub`,
+    city: 'Tadepalligudem',
+    state: 'Andhra Pradesh',
+    country: 'India',
+    pincode: '534102',
+    registeredAt: new Date().toISOString(),
+    isVerified: true,
+  };
+
+  users.push(newDriver);
+  saveRegisteredUsers(users);
+
+  // Notify active components
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('freshlane_drivers_updated', { detail: newDriver }));
+  }
+
+  return { success: true, driver: newDriver };
+}
+
+export function getRegisteredDrivers(): (UserAccount & { password?: string })[] {
+  const users = getRegisteredUsers();
+  return users.filter((u) => u.role === 'driver');
+}
+
+export function deleteDriverAccount(driverId: string): boolean {
+  const users = getRegisteredUsers();
+  const initialCount = users.length;
+  const filtered = users.filter((u) => !(u.role === 'driver' && u.id === driverId));
+
+  if (filtered.length !== initialCount) {
+    saveRegisteredUsers(filtered);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('freshlane_drivers_updated'));
+    }
+    return true;
+  }
+  return false;
+}
+
+export function updateDriverPassword(driverId: string, newPassword: string): boolean {
+  const users = getRegisteredUsers();
+  const driver = users.find((u) => u.role === 'driver' && u.id === driverId);
+  if (!driver) return false;
+
+  driver.password = newPassword.trim();
+  saveRegisteredUsers(users);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('freshlane_drivers_updated'));
+  }
+  return true;
+}
+
+/**
+ * Updates a user's role (used by Admin to promote to delivery_partner or admin)
+ */
+export async function updateUserRole(
+  userId: string,
+  newRole: AppRole
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const users = getRegisteredUsers();
+    const target = users.find((u) => u.id === userId || u.email.toLowerCase() === userId.toLowerCase());
+    if (target) {
+      target.role = newRole;
+      saveRegisteredUsers(users);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('freshlane_users_updated'));
+      }
+    }
+
+    // Sync with backend API
+    const token = getSessionToken();
+    const cfUrl = typeof window !== 'undefined' ? (localStorage.getItem('freshlane_cloudflare_url') || '').trim().replace(/\/$/, '') : '';
+    const endpoint = cfUrl ? `${cfUrl}/api/admin/users/${userId}/role` : `/api/admin/users/${userId}/role`;
+
+    if (token) {
+      await fetch(endpoint, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          'x-session-token': token,
+        },
+        body: JSON.stringify({ role: newRole }),
+      });
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Failed to update user role' };
+  }
+}
+
+/**
+ * Fetch all registered users for Admin RBAC management
+ */
+export async function fetchAllUsers(): Promise<UserAccount[]> {
+  try {
+    const token = getSessionToken();
+    const cfUrl = typeof window !== 'undefined' ? (localStorage.getItem('freshlane_cloudflare_url') || '').trim().replace(/\/$/, '') : '';
+    const endpoint = cfUrl ? `${cfUrl}/api/admin/users` : `/api/admin/users`;
+
+    if (token) {
+      const res = await fetch(endpoint, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'x-session-token': token,
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.success && Array.isArray(data.users)) {
+          return data.users;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Could not fetch backend users:', err);
+  }
+  return getRegisteredUsers();
+}
+
